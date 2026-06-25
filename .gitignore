@@ -1,0 +1,22 @@
+# 编译产物
+*.o
+bench
+verify
+bench_bf16
+verify_bf16
+tc_01_wmma_naive
+tc_02_wmma_smem
+tc_03_wmma_pipe
+tc_04_wgmma_tma_ws
+tc_05_wgmma_fp8
+
+# Nsight 报告（大二进制；文本 details/SUMMARY 保留入库）
+*.ncu-rep
+*.nsys-rep
+profiling/*.run.log
+
+# 编辑器/系统
+.vscode/
+.cache/
+*.swp
+.DS_Store

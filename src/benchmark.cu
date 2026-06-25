@@ -54,8 +54,10 @@ void launch_cublas_ref(int M, int N, int K,
                        float beta,
                        float* C)
 {
-    cublasHandle_t handle;
-    CHECK_CUBLAS(cublasCreate(&handle));
+    // handle 只创建一次：cublasCreate/Destroy 每次约 0.33ms，放进计时循环会
+    // 严重拉低 cuBLAS 的 GFLOPS（小尺寸尤甚），造成"手写超过 cuBLAS"的假象。
+    static cublasHandle_t handle = nullptr;
+    if(!handle) CHECK_CUBLAS(cublasCreate(&handle));
 
     CHECK_CUBLAS(cublasSgemm(handle,
                              CUBLAS_OP_N,
@@ -66,8 +68,6 @@ void launch_cublas_ref(int M, int N, int K,
                              A, K,
                              &beta,
                              C, N));
-
-    CHECK_CUBLAS(cublasDestroy(handle));
 }
 
 
@@ -199,10 +199,10 @@ KernelFn g_kernels[] = {launch_cublas_ref,launch_naive_kernel,launch_smem_kernel
     launch_at<64,64,8,8,4>,launch_at<64,64,16,8,4>,launch_at<64,64,8,8,8>,
     launch_warptile_kernel,launch_warptile_vec_kernel,launch_bank_conflict_kernel,
     launch_double_buffer_kernel};
-const char* g_names[] = {"dummy_kernel","naive_kernel",
+const char* g_names[] = {"cublas_ref","naive_kernel",
     "smem_kernel","blocktiling_kernel","Dblocktiling_kernel",
-    "vectorized_kernel","autotuning_kernel",
-    "7","8","warptile_kernel","warptile_vec_kernel",
+    "vectorized_kernel","autotune_64x64x8_8x4",
+    "autotune_64x64x16_8x4","autotune_64x64x8_8x8","warptile_kernel","warptile_vec_kernel",
     "bank_conflict_kernel","double_buffer_kernel"};
 
 int main(int argc,char** argv)

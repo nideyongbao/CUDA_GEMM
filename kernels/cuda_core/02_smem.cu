@@ -1,4 +1,4 @@
-#include "../include/common.h"
+#include "../../include/common.h"
 
 __global__ void smem_kernel(int M, int N, int K,
                              float alpha,

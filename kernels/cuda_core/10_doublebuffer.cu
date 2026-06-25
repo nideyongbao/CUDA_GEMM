@@ -1,4 +1,4 @@
-#include "../include/common.h"
+#include "../../include/common.h"
 
 
 __global__ void double_buffer_kernel(int M, int N, int K,

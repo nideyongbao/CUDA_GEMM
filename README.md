@@ -6,11 +6,14 @@
 
 ## 项目内容
 
-- `kernels/`: 不同阶段的 CUDA SGEMM kernel 实现
-- `src/benchmark.cu`: benchmark 入口，按 kernel id 跑性能
-- `src/verify.cu`: correctness 入口，和 cuBLAS reference 对比结果
-- `include/`: 公共宏、kernel 注册声明、autotuning 模板
-- `docs/`: GPU 硬件知识、性能分析方法论和每个 kernel 的 ncu 分析记录
+按"计算引擎"拆分：
+
+- `kernels/cuda_core/`: 跑在 CUDA core 上的 kernel —— FP32 阶梯（`01_naive`…`10_doublebuffer`）+ 同一批 kernel 的 BF16 版（`bf16_cudacore.cu`，datatype 实验）
+- `kernels/tensor_core/`: 跑在 Tensor Core 上的**一个个独立最简用例（自带 main）** —— `tc_01_wmma_naive` / `tc_02_wmma_smem` / `tc_03_wmma_pipe`(cp.async) / `tc_04_wgmma_tma_ws`(WGMMA+TMA) / `tc_05_wgmma_fp8`(FP8)
+- `src/`: FP32 入口 `benchmark.cu`/`verify.cu`；BF16(cuda core) 入口 `bench_bf16.cu`/`verify_bf16.cu`
+- `include/`: 公共宏、FP32/BF16 声明、autotuning 模板、tensor core 用例公共脚手架 `tc_common.cuh`
+- `profiling/`: tensor core 用例的 `ncu --set full` 报告 + `SUMMARY.md`
+- `docs/`: GPU 硬件知识、性能分析方法论、每个 kernel 的 ncu 分析（00–07 CUDA core，08–12 Tensor core，13 总结）
 
 矩阵计算接口统一为：
 
@@ -27,24 +30,26 @@ C = alpha * A * B + beta * C
 - cuBLAS
 - GNU Make
 
-当前 Makefile 默认编译架构是：
+本项目目标硬件是 **NVIDIA H20（Hopper，compute capability 9.0）**，Makefile 默认编译架构为：
 
 ```makefile
-ARCH := -arch=sm_75
+ARCH := -arch=sm_90a
 ```
 
-如果在其他显卡上跑，需要按设备改成对应架构，例如 Ada 系列可改成 `sm_89`。改完头文件或架构后建议执行 `make clean && make`。
+`sm_90a` 是 Hopper 架构专用目标（architecture-specific），后续若扩展 WGMMA / TMA 等 Hopper 张量指令也需要它。
+
+> 注意：旧版本默认是 `sm_75`（Turing）。在 H20 上用 `sm_75` 编译出的二进制其实**也能跑**——因为 fatbin 里带了 `compute_75` 的 PTX，驱动会在加载时 JIT 成 sm_90 SASS——但会有首次启动 JIT 开销、且不是 Hopper 原生调优代码，性能数字不可信。务必用 `sm_90a`。
+
+换其他显卡时按设备改 `ARCH`：Ada 系列 `sm_89`、A100 `sm_80`、Turing `sm_75`。改完头文件或架构后执行 `make clean && make`。
 
 ## 编译
 
 ```bash
-make
+make        # FP32(bench/verify) + BF16 cuda core(bench_bf16/verify_bf16)
+make tc     # 5 个 Tensor Core 最简用例(tc_01..tc_05)
 ```
 
-会生成两个可执行文件：
-
-- `bench`: 性能测试
-- `verify`: 正确性验证
+`make` 生成：`bench`/`verify`（FP32）、`bench_bf16`/`verify_bf16`（BF16 cuda core）；`make tc` 生成 `tc_01_wmma_naive`…`tc_05_wgmma_fp8`。
 
 清理生成文件：
 
@@ -113,6 +118,42 @@ autotuning 扫描入口：
 ./bench autotune 4096 4096 4096
 ```
 
+## BF16（CUDA core 对照）
+
+`make` 默认还会生成 `bench_bf16` / `verify_bf16`：把 CUDA core 那批 kernel 改成 BF16 输入 / FP32 累加（**仍跑 CUDA core**），用来证明"光换数据类型不碰张量核没用"。
+
+```bash
+./bench_bf16 <id> M N K     # 输出 GFLOPS 及对 148 TFLOPS BF16 峰值的利用率
+./verify_bf16 <id> M N K    # 与 cuBLAS BF16 对拍
+```
+id 0=cuBLAS BF16，1–12 与 FP32 同名。结论：全量天花板只有 **~17%**（compute bound 在 FP32 单元上，BF16 只省了一半访存）。
+
+## Tensor Core 系列（最简用例 + ncu）
+
+`make tc` 生成 5 个独立可执行用例（`tc_04/tc_05` 用 TMA，需 `-lcuda`）：
+
+```bash
+make tc
+./tc_01_wmma_naive  4096 4096 4096   # 自带 verify(对拍 cuBLAS) + bench + util
+./tc_04_wgmma_tma_ws 4096 4096 4096
+./tc_05_wgmma_fp8    4096 4096 4096   # FP8，对拍 CPU double，util 对 296T
+```
+
+手写 tensor core 完整阶梯（4096³，对 148T；FP8 对 296T）：
+
+| 用例 | 技术 | util |
+| --- | --- | ---: |
+| tc_01 WMMA_naive | warp 级，global 直取 | 11.3% |
+| tc_02 WMMA_smem | + shared memory 复用 | 20.1% |
+| tc_03 WMMA_pipe | + cp.async 多级流水线 | 25.7% |
+| **tc_04 WGMMA** | warpgroup 异步 + TMA + warp specialization | **80.6%**（8192³ 88%）|
+| tc_05 WGMMA_fp8 | 同上换 FP8 | 75.8% /296T（224 TFLOPS）|
+| 参考 | cuBLAS BF16 (fair) | 89.1% |
+
+ncu 剖析见 `profiling/SUMMARY.md`；逐例分析见 docs 08–12。核心结论：**warp 级 WMMA 靠高占用率藏延迟（张量核饿死，≤26%）；warpgroup 级 WGMMA 靠异步流水线，占用率仅 7.6% 却 SM Busy 83%**——这才是逼近 148T 的路。
+
+> 注：cuBLAS 基线务必让 handle 复用——`cublasCreate/Destroy` 约 0.33ms/次，放进计时循环会把 cuBLAS 严重低估（4096³ 89%→68%），制造"手写反超 cuBLAS"假象。本项目已修复。详见 docs/13 §5。
+
 ## Kernel Id
 
 当前 `bench` / `verify` 注册表主要包含：
@@ -147,6 +188,16 @@ autotuning 扫描入口：
 6. [vectorizer](docs/05%20vectorizer.md)
 7. [warp tile](docs/06%20warp%20tile.md)
 8. [bank conflict](docs/07%20blank%20conflict.md)
+
+Tensor Core 系列（每个用例一篇，含 ncu 分析）：
+
+9. [WMMA naive](docs/08%20tensor%20core%20-%20WMMA%20naive.md)
+10. [WMMA smem](docs/09%20tensor%20core%20-%20WMMA%20smem.md)
+11. [WMMA cp.async pipeline](docs/10%20tensor%20core%20-%20WMMA%20cp.async%20pipeline.md)
+12. [WGMMA + TMA + warp specialization](docs/11%20tensor%20core%20-%20WGMMA%20TMA%20warp%20specialization.md)
+13. [FP8 WGMMA](docs/12%20tensor%20core%20-%20FP8%20WGMMA.md)
+
+**最终总结**（重点收敛）：[docs/13 H20 GEMM 复现总结.md](docs/13%20H20%20GEMM%20复现总结.md)。早期逐步复现详录见 [docs/H20复现结论.md](docs/H20复现结论.md)。
 
 `docs/6.1.md` 到 `docs/6.5.md` 是阶段性交接文档，记录了每轮实验结论、性能对账、踩坑和下一步计划。想快速了解项目演进，可以从最新的 [docs/6.5.md](docs/6.5.md) 开始。
 
