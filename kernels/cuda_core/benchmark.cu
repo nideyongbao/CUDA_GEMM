@@ -1,6 +1,6 @@
-#include "../include/common.h"
-#include "../include/kernels.h"
-#include "../include/06_autotuning.cuh"
+#include "../../include/common.h"
+#include "../../include/kernels.h"
+#include "../../include/06_autotuning.cuh"
 #include <cstdio>
 #include <cstdlib>
 #include <cublas_v2.h>

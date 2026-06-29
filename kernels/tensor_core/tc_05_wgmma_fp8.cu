@@ -89,7 +89,7 @@ static void create_tensor_map(CUtensorMap* tma, __nv_fp8_e4m3* g, int bh, int bw
     if(r!=CUDA_SUCCESS) printf("cuTensorMapEncodeTiled failed: %d\n",(int)r);
 }
 
-template<int BM,int BN,int BK,int QSIZE> struct SMem{
+template<int BM,int BN,int BK,int QSIZE> struct SMem05{
     alignas(128) __nv_fp8_e4m3 A[BM*BK*QSIZE];
     alignas(128) __nv_fp8_e4m3 B[BK*BN*QSIZE];
 };
@@ -105,7 +105,7 @@ wgmma_fp8_kernel(int M,int N,int K,float* C,const CUtensorMap* tmaA,const CUtens
     if(bx>=div_ceil(N,BN)||by>=div_ceil(M,BM)) return;
 
     extern __shared__ __align__(128) uint8_t smem[];
-    SMem<BM,BN,BK,K_STAGE>& s=*reinterpret_cast<SMem<BM,BN,BK,K_STAGE>*>(smem);
+    SMem05<BM,BN,BK,K_STAGE>& s=*reinterpret_cast<SMem05<BM,BN,BK,K_STAGE>*>(smem);
     __nv_fp8_e4m3* s_a=s.A; __nv_fp8_e4m3* s_b=s.B;
 
 #pragma nv_diag_suppress static_var_with_dynamic_init
@@ -178,7 +178,7 @@ __global__ void transpose_fp8(const __nv_fp8_e4m3* B,__nv_fp8_e4m3* Bt,int K,int
 constexpr int BM=128,BN=128,BK=128,QSIZE=3,THREADS=256;
 
 void run_fp8(int M,int N,int K,float* dC,const __nv_fp8_e4m3* dBt,CUtensorMap* tmaA,CUtensorMap* tmaB){
-    int smem=sizeof(SMem<BM,BN,BK,QSIZE>);
+    int smem=sizeof(SMem05<BM,BN,BK,QSIZE>);
     static bool set=false;
     if(!set){ CHECK_CUDA(cudaFuncSetAttribute(
         wgmma_fp8_kernel<64,128,32,BM,BN,BK,THREADS,QSIZE>,
@@ -223,15 +223,21 @@ static void verify(int sz){
     free(hA);free(hB);free(hC);
 }
 
-int main(int argc,char**argv){
-    int M=4096,N=4096,K=4096;
-    if(argc==4){ M=atoi(argv[1]);N=atoi(argv[2]);K=atoi(argv[3]); }
+// ============================================================================
+// 派发入口（由 tensor_core/{verify,bench} 按 id 调用，不再各自带 main）。
+// FP8 没有简单 cuBLAS 路径，verify 用 CPU double 参考（O(n^3)），故限制在 <=512^3 对拍；
+// bench 在传入的 M,N,K 上测吞吐。
+// ============================================================================
+void tc05_verify(int M,int N,int K){
     cuInit(0);
-    if(M%BM||N%BN||K%BK){ printf("need M,N,K multiple of 128\n"); return 1; }
+    int sz = (M < 512 ? M : 512);
+    if(sz <= 0 || sz % BM){ printf("[tc_05] verify needs size multiple of %d\n", BM); return; }
+    verify(sz);
+}
 
-    verify(512);   // 小尺寸 CPU double 对拍
-
-    // ---- bench at M,N,K ----
+void tc05_bench(int M,int N,int K){
+    cuInit(0);
+    if(M%BM||N%BN||K%BK){ printf("[tc_05] need M,N,K multiple of 128\n"); return; }
     size_t nA=(size_t)M*K,nB=(size_t)K*N,nC=(size_t)M*N;
     __nv_fp8_e4m3 *hA=(__nv_fp8_e4m3*)malloc(nA),*hB=(__nv_fp8_e4m3*)malloc(nB);
     srand(0);
@@ -249,7 +255,6 @@ int main(int argc,char**argv){
     CHECK_CUDA(cudaMalloc(&dtA,sizeof(CUtensorMap))); CHECK_CUDA(cudaMalloc(&dtB,sizeof(CUtensorMap)));
     CHECK_CUDA(cudaMemcpy(dtA,&tA,sizeof(CUtensorMap),cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(dtB,&tB,sizeof(CUtensorMap),cudaMemcpyHostToDevice));
-
     int warm=3,rep=20;
     for(int i=0;i<warm;i++) run_fp8(M,N,K,dC,dBt,dtA,dtB);
     CHECK_CUDA(cudaDeviceSynchronize());
@@ -261,5 +266,6 @@ int main(int argc,char**argv){
     double gf=2.0*M*N*K/(ms/1e3)/1e9;
     printf("[tc_05 WGMMA_fp8] M=%d N=%d K=%d  time=%.4f ms  GFLOPS=%.2f  util(vs296T)=%.1f%%  util(vs148T)=%.1f%%\n",
            M,N,K,ms,gf,gf/296000.0*100.0,gf/148000.0*100.0);
-    return 0;
+    cudaFree(dA);cudaFree(dB);cudaFree(dBt);cudaFree(dC);cudaFree(dtA);cudaFree(dtB);
+    free(hA);free(hB);
 }

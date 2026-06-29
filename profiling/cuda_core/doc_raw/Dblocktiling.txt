@@ -1,0 +1,163 @@
+### P1 SOL (ncu --set basic)
+[3205541] bench@127.0.0.1
+  Dblocktiling_kernel(int, int, int, float, const float *, const float *, float, float *) (64, 64, 1)x(16, 8, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- -------------
+    Metric Name             Metric Unit  Metric Value
+    ----------------------- ----------- -------------
+    DRAM Frequency                  Ghz          2.62
+    SM Frequency                    Ghz          1.83
+    Elapsed Cycles                cycle    17,321,671
+    Memory Throughput                 %         78.71
+    DRAM Throughput                   %          2.49
+    Duration                         ms          9.47
+    L1/TEX Cache Throughput           %         78.95
+    L2 Cache Throughput               %         10.60
+    SM Active Cycles              cycle 17,250,430.55
+    Compute (SM) Throughput           %         59.01
+    ----------------------- ----------- -------------
+
+    OPT   Memory is more heavily utilized than Compute: Look at the Memory Workload Analysis section to identify the L1 
+          bottleneck. Check memory replay (coalescing) metrics to make sure you're efficiently utilizing the bytes      
+          transferred. Also consider whether it is possible to do more work per memory access (kernel fusion) or        
+          whether there are values you can (re)compute.                                                                 
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   128
+    Cluster Scheduling Policy                           PolicySpread
+    Cluster Size                                                   0
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                  4,096
+    Registers Per Thread             register/thread              96
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            4.10
+    # SMs                                         SM              78
+    Stack Size                                                 1,024
+    Threads                                   thread         524,288
+    # TPCs                                                        39
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                               10.50
+    -------------------------------- --------------- ---------------
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Max Active Clusters                 cluster            0
+    Max Cluster Size                      block            8
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Block Limit Barriers                  block           32
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            5
+    Block Limit Shared Mem                block           12
+    Block Limit Warps                     block           16
+    Theoretical Active Warps per SM        warp           20
+    Theoretical Occupancy                     %        31.25
+    Achieved Occupancy                        %        30.34
+    Achieved Active Warps Per SM           warp        19.42
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 68.75%                                                                                    
+          The 5.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (31.2%) is limited by the number of required      
+          registers.                                                                                                    
+
+    Section: GPU and Memory Workload Distribution
+    -------------------------- ----------- -------------
+    Metric Name                Metric Unit  Metric Value
+    -------------------------- ----------- -------------
+    Average DRAM Active Cycles       cycle    618,144.83
+    Total DRAM Elapsed Cycles        cycle 1,189,932,544
+    Average L1 Active Cycles         cycle 17,250,430.55
+    Total L1 Elapsed Cycles          cycle 1,349,725,390
+    Average L2 Active Cycles         cycle 15,965,919.47
+    Total L2 Elapsed Cycles          cycle 1,553,078,592
+    Average SM Active Cycles         cycle 17,250,430.55
+    Total SM Elapsed Cycles          cycle 1,349,725,390
+    Average SMSP Active Cycles       cycle 17,237,982.59
+    Total SMSP Elapsed Cycles        cycle 5,398,901,560
+    -------------------------- ----------- -------------
+
+
+### P2 STALLS (WarpStateStats + stall ratio)
+[3205606] bench@127.0.0.1
+  Dblocktiling_kernel(int, int, int, float, const float *, const float *, float, float *) (64, 64, 1)x(16, 8, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Command line profiler metrics
+    --------------------------------------------------------------------------- ----------- ------------
+    Metric Name                                                                 Metric Unit Metric Value
+    --------------------------------------------------------------------------- ----------- ------------
+    smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio           inst         1.19
+    smsp__average_warps_issue_stalled_math_pipe_throttle_per_issue_active.ratio        inst         0.11
+    smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio              inst         0.22
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio          inst         1.82
+    --------------------------------------------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle         8.18
+    Warp Cycles Per Executed Instruction           cycle         8.18
+    Avg. Active Threads Per Warp                                   32
+    Avg. Not Predicated Off Threads Per Warp                    31.92
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+
+### P3 SCHEDULER (SchedulerStats)
+[3205691] bench@127.0.0.1
+  Dblocktiling_kernel(int, int, int, float, const float *, const float *, float, float *) (64, 64, 1)x(16, 8, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %        59.37
+    Issued Warp Per Scheduler                        0.59
+    No Eligible                            %        40.63
+    Active Warps Per Scheduler          warp         4.85
+    Eligible Warps Per Scheduler        warp         1.76
+    ---------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 40.63%                                                                                    
+          Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only    
+          issues an instruction every 1.7 cycles. This might leave hardware resources underutilized and may lead to     
+          less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average    
+          of 4.85 active warps per scheduler, but only an average of 1.76 warps were eligible per cycle. Eligible       
+          warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no      
+          eligible warp results in no instruction being issued and the issue slot remains unused. To increase the       
+          number of eligible warps, avoid possible load imbalances due to highly different execution durations per      
+          warp. Reducing stalls indicated on the Warp State Statistics and Source Counters sections can help, too.      
+
+
+### P4 COALESCE (global sectors/req ld,st)
+[3205751] bench@127.0.0.1
+  Dblocktiling_kernel(int, int, int, float, const float *, const float *, float, float *) (64, 64, 1)x(16, 8, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Command line profiler metrics
+    -------------------------------------------------------------------- ----------- ------------
+    Metric Name                                                          Metric Unit Metric Value
+    -------------------------------------------------------------------- ----------- ------------
+    l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_ld.ratio      sector         4.09
+    l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_st.ratio      sector           16
+    -------------------------------------------------------------------- ----------- ------------
+
+
+### P5 BANK CONFLICT (shared ld,st)
+[3205810] bench@127.0.0.1
+  Dblocktiling_kernel(int, int, int, float, const float *, const float *, float, float *) (64, 64, 1)x(16, 8, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Command line profiler metrics
+    -------------------------------------------------------- ----------- ------------
+    Metric Name                                              Metric Unit Metric Value
+    -------------------------------------------------------- ----------- ------------
+    l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum              268,799,510
+    l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st.sum                8,456,644
+    -------------------------------------------------------- ----------- ------------
+

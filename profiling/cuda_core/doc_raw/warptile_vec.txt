@@ -1,0 +1,151 @@
+### P1 SOL (ncu --set basic)
+[3206616] bench@127.0.0.1
+  warptile_vec_kernel(int, int, int, float, const float *, const float *, float, float *) (32, 64, 1)x(128, 1, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- -------------
+    Metric Name             Metric Unit  Metric Value
+    ----------------------- ----------- -------------
+    DRAM Frequency                  Ghz          2.62
+    SM Frequency                    Ghz          1.83
+    Elapsed Cycles                cycle    11,306,944
+    Memory Throughput                 %         66.36
+    DRAM Throughput                   %          3.54
+    Duration                         ms          6.18
+    L1/TEX Cache Throughput           %         67.48
+    L2 Cache Throughput               %         10.46
+    SM Active Cycles              cycle 11,104,854.14
+    Compute (SM) Throughput           %         69.54
+    ----------------------- ----------- -------------
+
+    INF   Compute and Memory are well-balanced: To reduce runtime, both computation and memory traffic must be reduced. 
+          Check both the Compute Workload Analysis and Memory Workload Analysis sections.                               
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   128
+    Cluster Scheduling Policy                           PolicySpread
+    Cluster Size                                                   0
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                  2,048
+    Registers Per Thread             register/thread             105
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            6.14
+    # SMs                                         SM              78
+    Stack Size                                                 1,024
+    Threads                                   thread         262,144
+    # TPCs                                                        39
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                6.56
+    -------------------------------- --------------- ---------------
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Max Active Clusters                 cluster            0
+    Max Cluster Size                      block            8
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Block Limit Barriers                  block           32
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            4
+    Block Limit Shared Mem                block            9
+    Block Limit Warps                     block           16
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        24.07
+    Achieved Active Warps Per SM           warp        15.41
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+    Section: GPU and Memory Workload Distribution
+    -------------------------- ----------- -------------
+    Metric Name                Metric Unit  Metric Value
+    -------------------------- ----------- -------------
+    Average DRAM Active Cycles       cycle    572,426.67
+    Total DRAM Elapsed Cycles        cycle   776,759,040
+    Average L1 Active Cycles         cycle 11,104,854.14
+    Total L1 Elapsed Cycles          cycle   880,847,856
+    Average L2 Active Cycles         cycle 10,198,766.79
+    Total L2 Elapsed Cycles          cycle 1,013,100,768
+    Average SM Active Cycles         cycle 11,104,854.14
+    Total SM Elapsed Cycles          cycle   880,847,856
+    Average SMSP Active Cycles       cycle 11,095,320.14
+    Total SMSP Elapsed Cycles        cycle 3,523,391,424
+    -------------------------- ----------- -------------
+
+
+### P2 STALLS (WarpStateStats + stall ratio)
+[3206691] bench@127.0.0.1
+  warptile_vec_kernel(int, int, int, float, const float *, const float *, float, float *) (32, 64, 1)x(128, 1, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Command line profiler metrics
+    --------------------------------------------------------------------------- ----------- ------------
+    Metric Name                                                                 Metric Unit Metric Value
+    --------------------------------------------------------------------------- ----------- ------------
+    smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio           inst         0.74
+    smsp__average_warps_issue_stalled_math_pipe_throttle_per_issue_active.ratio        inst         0.04
+    smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio              inst         0.00
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio          inst         1.19
+    --------------------------------------------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle         5.45
+    Warp Cycles Per Executed Instruction           cycle         5.45
+    Avg. Active Threads Per Warp                                   32
+    Avg. Not Predicated Off Threads Per Warp                    32.00
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+
+### P3 SCHEDULER (SchedulerStats)
+[3206775] bench@127.0.0.1
+  warptile_vec_kernel(int, int, int, float, const float *, const float *, float, float *) (32, 64, 1)x(128, 1, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %        70.75
+    Issued Warp Per Scheduler                        0.71
+    No Eligible                            %        29.25
+    Active Warps Per Scheduler          warp         3.85
+    Eligible Warps Per Scheduler        warp         1.74
+    ---------------------------- ----------- ------------
+
+
+### P4 COALESCE (global sectors/req ld,st)
+[3206819] bench@127.0.0.1
+  warptile_vec_kernel(int, int, int, float, const float *, const float *, float, float *) (32, 64, 1)x(128, 1, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Command line profiler metrics
+    -------------------------------------------------------------------- ----------- ------------
+    Metric Name                                                          Metric Unit Metric Value
+    -------------------------------------------------------------------- ----------- ------------
+    l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_ld.ratio      sector        16.00
+    l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_st.ratio      sector           16
+    -------------------------------------------------------------------- ----------- ------------
+
+
+### P5 BANK CONFLICT (shared ld,st)
+[3206913] bench@127.0.0.1
+  warptile_vec_kernel(int, int, int, float, const float *, const float *, float, float *) (32, 64, 1)x(128, 1, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Command line profiler metrics
+    -------------------------------------------------------- ----------- ------------
+    Metric Name                                              Metric Unit Metric Value
+    -------------------------------------------------------- ----------- ------------
+    l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum                  151,451
+    l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st.sum               21,938,185
+    -------------------------------------------------------- ----------- ------------
+

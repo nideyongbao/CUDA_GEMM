@@ -19,7 +19,7 @@ max_abs 2.9e-2 看着比 bf16 大，但这是 fp8(e4m3 只有 3 位尾数)的固
 
 ## 2、观大局
 ```
-sudo ncu --set full -k regex:"wgmma_fp8_kernel" -s 1 -c 1 ./tc_05_wgmma_fp8 2048 2048 2048
+sudo /usr/local/cuda/bin/ncu --set full -k regex:"wgmma_fp8_kernel" -s 1 -c 1 ./kernels/tensor_core/bench 5 2048 2048 2048
 ```
 
 ```
@@ -33,7 +33,28 @@ sudo ncu --set full -k regex:"wgmma_fp8_kernel" -s 1 -c 1 ./tc_05_wgmma_fp8 2048
     Registers Per Thread  register/thread       154
     SM Busy                           %        73.09
 ```
-和 BF16 WGMMA 同构：L1/TEX 低（TMA 走专用路径）、SM Busy 高（73%）、占用率仅 7.4%。头号 stall 同样是 CTA barrier(48.7%)——生产者/消费者交接。结构完全没变，只是吃的是 fp8。
+和 BF16 WGMMA 同构：L1/TEX 低（TMA 走专用路径）、SM Busy 高（73%）、占用率仅 7.4%。结构完全没变，只是吃的是 fp8。
+
+看延迟同样验证这一点：
+```
+sudo /usr/local/cuda/bin/ncu --section WarpStateStats \
+  --metrics smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio,\
+smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio,\
+smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio,\
+smsp__average_warps_issue_stalled_barrier_per_issue_active.ratio \
+  -k regex:"wgmma_fp8_kernel" -s 1 -c 1 ./kernels/tensor_core/bench 5 2048 2048 2048
+```
+
+```
+    Warp Cycles Per Issued Instruction                                          cycle        25.20
+    --------------------------------------------------------------------------- ----------- ------------
+    smsp__average_warps_issue_stalled_barrier_per_issue_active.ratio                   inst        12.29
+    smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio           inst         4.30
+    smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio              inst         1.23
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio          inst         0.37
+    --------------------------------------------------------------------------- ----------- ------------
+```
+按 ratio÷cyc/issue（25.20）换算：头号 stall 同样是 **CTA barrier 12.29 → 48.8%**（生产者/消费者交接，与 tc_04 同构），其次 long_scoreboard 4.30 → 17.1%，mio_throttle/short_scoreboard 都很小。
 
 ## 3、性能：吞吐翻倍
 ```
@@ -46,3 +67,5 @@ FP8 把同一条流水线的吞吐**几乎翻倍**（224 vs 119 TFLOPS），对 
 FP8 WGMMA 复用了 BF16 那套 TMA+WGMMA+warp specialization 流水线，**只改类型/指令/BK 三处**就拿到 ~2× 吞吐、75.8% 的 FP8 峰值利用率（8192³ 84.8%），并用 CPU double 参考验证正确。
 
 这印证了 Hopper GEMM 的工程范式：**先把异步流水线骨架搭对，精度(bf16/fp8/未来 fp4)只是骨架上的可插拔参数。** 完整的精度/利用率阶梯见 [H20复现结论](H20%E5%A4%8D%E7%8E%B0%E7%BB%93%E8%AE%BA.md)。
+
+> 本文 ncu 原始分项输出见 `profiling/tensor_core/doc_raw/tc_05_wgmma_fp8.txt`（与 cuda_core 的 doc_raw 对称，可由 `profiling/tensor_core/collect_doc_ncu.sh` 复跑）。

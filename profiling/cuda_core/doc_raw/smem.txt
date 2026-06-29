@@ -1,0 +1,170 @@
+### P1 SOL (ncu --set basic)
+[3204772] bench@127.0.0.1
+  smem_kernel(int, int, int, float, const float *, const float *, float, float *) (128, 128, 1)x(32, 32, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- -------------
+    Metric Name             Metric Unit  Metric Value
+    ----------------------- ----------- -------------
+    DRAM Frequency                  Ghz          2.62
+    SM Frequency                    Ghz          1.83
+    Elapsed Cycles                cycle    49,896,306
+    Memory Throughput                 %         90.34
+    DRAM Throughput                   %          7.02
+    Duration                         ms         27.27
+    L1/TEX Cache Throughput           %         90.65
+    L2 Cache Throughput               %          8.83
+    SM Active Cycles              cycle 49,676,957.88
+    Compute (SM) Throughput           %         76.00
+    ----------------------- ----------- -------------
+
+    INF   This workload is utilizing greater than 80.0% of the available compute or memory performance of the device.   
+          To further improve performance, work will likely need to be shifted from the most utilized to another unit.   
+          Start by analyzing L1 in the Memory Workload Analysis section.                                                
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                 1,024
+    Cluster Scheduling Policy                           PolicySpread
+    Cluster Size                                                   0
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                 16,384
+    Registers Per Thread             register/thread              32
+    Shared Memory Configuration Size           Kbyte           32.77
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            8.19
+    # SMs                                         SM              78
+    Stack Size                                                 1,024
+    Threads                                   thread      16,777,216
+    # TPCs                                                        39
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                              105.03
+    -------------------------------- --------------- ---------------
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Max Active Clusters                 cluster            0
+    Max Cluster Size                      block            8
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Block Limit Barriers                  block           32
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            2
+    Block Limit Shared Mem                block            3
+    Block Limit Warps                     block            2
+    Theoretical Active Warps per SM        warp           64
+    Theoretical Occupancy                     %          100
+    Achieved Occupancy                        %        99.66
+    Achieved Active Warps Per SM           warp        63.78
+    ------------------------------- ----------- ------------
+
+    Section: GPU and Memory Workload Distribution
+    -------------------------- ----------- --------------
+    Metric Name                Metric Unit   Metric Value
+    -------------------------- ----------- --------------
+    Average DRAM Active Cycles       cycle   5,016,156.17
+    Total DRAM Elapsed Cycles        cycle  3,427,641,856
+    Average L1 Active Cycles         cycle  49,676,957.88
+    Total L1 Elapsed Cycles          cycle  3,887,941,360
+    Average L2 Active Cycles         cycle  46,427,547.30
+    Total L2 Elapsed Cycles          cycle  4,475,388,960
+    Average SM Active Cycles         cycle  49,676,957.88
+    Total SM Elapsed Cycles          cycle  3,887,941,360
+    Average SMSP Active Cycles       cycle  49,674,389.28
+    Total SMSP Elapsed Cycles        cycle 15,551,765,440
+    -------------------------- ----------- --------------
+
+
+### P2 STALLS (WarpStateStats + stall ratio)
+[3204861] bench@127.0.0.1
+  smem_kernel(int, int, int, float, const float *, const float *, float, float *) (128, 128, 1)x(32, 32, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Command line profiler metrics
+    --------------------------------------------------------------------------- ----------- ------------
+    Metric Name                                                                 Metric Unit Metric Value
+    --------------------------------------------------------------------------- ----------- ------------
+    smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio           inst         7.07
+    smsp__average_warps_issue_stalled_math_pipe_throttle_per_issue_active.ratio        inst         0.06
+    smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio              inst        21.74
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio          inst         0.63
+    --------------------------------------------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        43.66
+    Warp Cycles Per Executed Instruction           cycle        43.66
+    Avg. Active Threads Per Warp                                   32
+    Avg. Not Predicated Off Threads Per Warp                    31.99
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+    ----- --------------------------------------------------------------------------------------------------------------
+    OPT   Est. Local Speedup: 49.8%                                                                                     
+          On average, each warp of this workload spends 21.7 cycles being stalled waiting for the MIO (memory           
+          input/output) instruction queue to be not full. This stall reason is high in cases of extreme utilization of  
+          the MIO pipelines, which include special math instructions, dynamic branches, as well as shared memory        
+          instructions. When caused by shared memory accesses, trying to use fewer but wider loads can reduce pipeline  
+          pressure. This stall type represents about 49.8% of the total average of 43.7 cycles between issuing two      
+          instructions.                                                                                                 
+    ----- --------------------------------------------------------------------------------------------------------------
+    INF   Check the Warp Stall Sampling (All Samples) table for the top stall locations in your source based on         
+          sampling data. The Kernel Profiling Guide                                                                     
+          (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-reference) provides more details    
+          on each stall reason.                                                                                         
+
+
+### P3 SCHEDULER (SchedulerStats)
+[3204960] bench@127.0.0.1
+  smem_kernel(int, int, int, float, const float *, const float *, float, float *) (128, 128, 1)x(32, 32, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %        36.53
+    Issued Warp Per Scheduler                        0.37
+    No Eligible                            %        63.47
+    Active Warps Per Scheduler          warp        15.94
+    Eligible Warps Per Scheduler        warp         2.62
+    ---------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 63.47%                                                                                    
+          Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only    
+          issues an instruction every 2.7 cycles. This might leave hardware resources underutilized and may lead to     
+          less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average    
+          of 15.94 active warps per scheduler, but only an average of 2.62 warps were eligible per cycle. Eligible      
+          warps are the subset of active warps that are ready to issue their next instruction. Every cycle with no      
+          eligible warp results in no instruction being issued and the issue slot remains unused. To increase the       
+          number of eligible warps, avoid possible load imbalances due to highly different execution durations per      
+          warp. Reducing stalls indicated on the Warp State Statistics and Source Counters sections can help, too.      
+
+
+### P4 COALESCE (global sectors/req ld,st)
+[3205035] bench@127.0.0.1
+  smem_kernel(int, int, int, float, const float *, const float *, float, float *) (128, 128, 1)x(32, 32, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Command line profiler metrics
+    -------------------------------------------------------------------- ----------- ------------
+    Metric Name                                                          Metric Unit Metric Value
+    -------------------------------------------------------------------- ----------- ------------
+    l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_ld.ratio      sector            4
+    l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_st.ratio      sector            4
+    -------------------------------------------------------------------- ----------- ------------
+
+
+### P5 BANK CONFLICT (shared ld,st)
+[3205105] bench@127.0.0.1
+  smem_kernel(int, int, int, float, const float *, const float *, float, float *) (128, 128, 1)x(32, 32, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Command line profiler metrics
+    -------------------------------------------------------- ----------- ------------
+    Metric Name                                              Metric Unit Metric Value
+    -------------------------------------------------------- ----------- ------------
+    l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum                  573,162
+    l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st.sum               12,801,929
+    -------------------------------------------------------- ----------- ------------
+

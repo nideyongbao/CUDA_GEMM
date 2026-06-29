@@ -1,0 +1,152 @@
+### P1 SOL (ncu --set basic)
+[3205888] bench@127.0.0.1
+  vectorized_kernel(int, int, int, float, const float *, const float *, float, float *) (64, 64, 1)x(16, 8, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- -------------
+    Metric Name             Metric Unit  Metric Value
+    ----------------------- ----------- -------------
+    DRAM Frequency                  Ghz          2.62
+    SM Frequency                    Ghz          1.83
+    Elapsed Cycles                cycle    11,914,803
+    Memory Throughput                 %         88.52
+    DRAM Throughput                   %         11.90
+    Duration                         ms          6.51
+    L1/TEX Cache Throughput           %         89.84
+    L2 Cache Throughput               %         18.08
+    SM Active Cycles              cycle 11,737,868.91
+    Compute (SM) Throughput           %         67.64
+    ----------------------- ----------- -------------
+
+    INF   This workload is utilizing greater than 80.0% of the available compute or memory performance of the device.   
+          To further improve performance, work will likely need to be shifted from the most utilized to another unit.   
+          Start by analyzing L1 in the Memory Workload Analysis section.                                                
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   128
+    Cluster Scheduling Policy                           PolicySpread
+    Cluster Size                                                   0
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                  4,096
+    Registers Per Thread             register/thread              63
+    Shared Memory Configuration Size           Kbyte          102.40
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            4.10
+    # SMs                                         SM              78
+    Stack Size                                                 1,024
+    Threads                                   thread         524,288
+    # TPCs                                                        39
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                6.56
+    -------------------------------- --------------- ---------------
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Max Active Clusters                 cluster            0
+    Max Cluster Size                      block            8
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Block Limit Barriers                  block           32
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            8
+    Block Limit Shared Mem                block           20
+    Block Limit Warps                     block           16
+    Theoretical Active Warps per SM        warp           32
+    Theoretical Occupancy                     %           50
+    Achieved Occupancy                        %        48.10
+    Achieved Active Warps Per SM           warp        30.78
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 50%                                                                                       
+          The 8.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (50.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+    Section: GPU and Memory Workload Distribution
+    -------------------------- ----------- -------------
+    Metric Name                Metric Unit  Metric Value
+    -------------------------- ----------- -------------
+    Average DRAM Active Cycles       cycle  2,028,366.17
+    Total DRAM Elapsed Cycles        cycle   818,507,008
+    Average L1 Active Cycles         cycle 11,737,868.91
+    Total L1 Elapsed Cycles          cycle   929,208,186
+    Average L2 Active Cycles         cycle 10,880,849.85
+    Total L2 Elapsed Cycles          cycle 1,068,186,048
+    Average SM Active Cycles         cycle 11,737,868.91
+    Total SM Elapsed Cycles          cycle   929,208,186
+    Average SMSP Active Cycles       cycle 11,737,003.98
+    Total SMSP Elapsed Cycles        cycle 3,716,832,744
+    -------------------------- ----------- -------------
+
+
+### P2 STALLS (WarpStateStats + stall ratio)
+[3205949] bench@127.0.0.1
+  vectorized_kernel(int, int, int, float, const float *, const float *, float, float *) (64, 64, 1)x(16, 8, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Command line profiler metrics
+    --------------------------------------------------------------------------- ----------- ------------
+    Metric Name                                                                 Metric Unit Metric Value
+    --------------------------------------------------------------------------- ----------- ------------
+    smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio           inst         2.16
+    smsp__average_warps_issue_stalled_math_pipe_throttle_per_issue_active.ratio        inst         0.06
+    smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio              inst         1.09
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio          inst         1.81
+    --------------------------------------------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle        11.21
+    Warp Cycles Per Executed Instruction           cycle        11.21
+    Avg. Active Threads Per Warp                                   32
+    Avg. Not Predicated Off Threads Per Warp                    32.00
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+
+### P3 SCHEDULER (SchedulerStats)
+[3206047] bench@127.0.0.1
+  vectorized_kernel(int, int, int, float, const float *, const float *, float, float *) (64, 64, 1)x(16, 8, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %        68.64
+    Issued Warp Per Scheduler                        0.69
+    No Eligible                            %        31.36
+    Active Warps Per Scheduler          warp         7.70
+    Eligible Warps Per Scheduler        warp         2.64
+    ---------------------------- ----------- ------------
+
+
+### P4 COALESCE (global sectors/req ld,st)
+[3206099] bench@127.0.0.1
+  vectorized_kernel(int, int, int, float, const float *, const float *, float, float *) (64, 64, 1)x(16, 8, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Command line profiler metrics
+    -------------------------------------------------------------------- ----------- ------------
+    Metric Name                                                          Metric Unit Metric Value
+    -------------------------------------------------------------------- ----------- ------------
+    l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_ld.ratio      sector           16
+    l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_st.ratio      sector           16
+    -------------------------------------------------------------------- ----------- ------------
+
+
+### P5 BANK CONFLICT (shared ld,st)
+[3206168] bench@127.0.0.1
+  vectorized_kernel(int, int, int, float, const float *, const float *, float, float *) (64, 64, 1)x(16, 8, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Command line profiler metrics
+    -------------------------------------------------------- ----------- ------------
+    Metric Name                                              Metric Unit Metric Value
+    -------------------------------------------------------- ----------- ------------
+    l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum                  144,270
+    l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st.sum               36,777,844
+    -------------------------------------------------------- ----------- ------------
+

@@ -1,6 +1,6 @@
 // BF16 correctness：与 cuBLAS BF16(cublasGemmEx, bf16 in / fp32 accum) 对拍。
 // 所有 kernel 读同一份 bf16 A/B，差异只来自累加顺序 / Tensor Core 取整。
-#include "../include/bf16.h"
+#include "../../include/bf16.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>

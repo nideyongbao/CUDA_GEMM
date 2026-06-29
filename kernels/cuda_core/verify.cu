@@ -1,8 +1,8 @@
-#include "../include/common.h"
-#include "../include/kernels.h"
+#include "../../include/common.h"
+#include "../../include/kernels.h"
 #include <cstdio>
 #include <cstdlib>
-#include "../include/06_autotuning.cuh"
+#include "../../include/06_autotuning.cuh"
 #include <math.h>
 #include <cublas_v2.h>
 

@@ -12,7 +12,7 @@ WMMA 是 **warp 级**：32 线程先把 fragment `load_matrix_sync` 装进寄存
 
 ## 1、观大局
 ```
-sudo ncu --set full -k regex:"wgmma_kernel" -s 1 -c 1 ./tc_04_wgmma_tma_ws 2048 2048 2048
+sudo /usr/local/cuda/bin/ncu --set full -k regex:"wgmma_kernel" -s 1 -c 1 ./kernels/tensor_core/bench 4 2048 2048 2048
 ```
 
 ```
@@ -35,13 +35,26 @@ sudo ncu --set full -k regex:"wgmma_kernel" -s 1 -c 1 ./tc_04_wgmma_tma_ws 2048 
 
 ## 2、看延迟 + 占用率的颠覆
 ```
-    Warp Cycles Per Issued Instruction       cycle       25.14
-    头号 stall：CTA barrier ≈ 13.5 cyc 占 53.5%
-    Achieved Occupancy = 7.58%
+sudo /usr/local/cuda/bin/ncu --section WarpStateStats \
+  --metrics smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio,\
+smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio,\
+smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio,\
+smsp__average_warps_issue_stalled_barrier_per_issue_active.ratio \
+  -k regex:"wgmma_kernel" -s 1 -c 1 ./kernels/tensor_core/bench 4 2048 2048 2048
 ```
-最反直觉的一点：**占用率只有 7.58%**（每线程 154 寄存器 + 96KB smem，每 SM 只挂得下 1~2 个 block），却跑出了 82.8% 的 SM Busy。
 
-这正是 Hopper 路线和 WMMA 的本质差别：WMMA 靠**高占用率(TLP)**——很多 warp 轮流跑来盖住访存延迟；WGMMA 靠**深度异步流水线**——TMA 异步搬、WGMMA 异步算、mbarrier 衔接，一个 warpgroup 自己就把延迟流水起来，不需要很多 warp。头号 stall 是 **CTA barrier(53.5%)**，即生产者/消费者在 mbarrier 上的交接，这是流水线结构的固有同步，且大部分被重叠掉了。
+```
+    Warp Cycles Per Issued Instruction                                          cycle        25.09
+    --------------------------------------------------------------------------- ----------- ------------
+    smsp__average_warps_issue_stalled_barrier_per_issue_active.ratio                   inst        13.46
+    smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio           inst         4.75
+    smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio              inst         1.36
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio          inst         0.39
+    --------------------------------------------------------------------------- ----------- ------------
+```
+（Achieved Occupancy = 7.58%，见 §1 的 `--set full`。）按 ratio÷cyc/issue（25.09）换算占比，最反直觉的一点：**占用率只有 7.58%**（每线程 154 寄存器 + 96KB smem，每 SM 只挂得下 1~2 个 block），却跑出了 82.8% 的 SM Busy。
+
+这正是 Hopper 路线和 WMMA 的本质差别：WMMA 靠**高占用率(TLP)**——很多 warp 轮流跑来盖住访存延迟；WGMMA 靠**深度异步流水线**——TMA 异步搬、WGMMA 异步算、mbarrier 衔接，一个 warpgroup 自己就把延迟流水起来，不需要很多 warp。头号 stall 是 **CTA barrier 13.46 → 53.6%**（生产者/消费者 mbarrier 交接），即流水线结构的固有同步、且大部分被重叠掉了；其余 long_scoreboard 4.75 → 18.9%，mio_throttle/short_scoreboard 都很小。
 
 ## 3、性能与 cuBLAS 对照
 4096³ 实测：
@@ -58,3 +71,5 @@ cuBLAS BF16 (fair) time=1.0426 ms  GFLOPS=131820  util(vs148T)=89.1%
 换上 Hopper 原生 **WGMMA + TMA + warp specialization** 是质变：张量核第一次成为最高利用管线（SM Busy 82.8%），占用率仅 7.6% 却最快——**用异步流水线代替高占用率隐藏延迟**。手写到此达到 cuBLAS 的九成。
 
 同样这套流水线换成 FP8 只需改极少代码、吞吐翻倍（见 [12 tensor core - FP8 WGMMA](12%20tensor%20core%20-%20FP8%20WGMMA.md)）。再往上（追平/超过 cuBLAS）要的是 persistent kernel + tile scheduler、cluster/DSMEM、自写 swizzle 等。
+
+> 本文 ncu 原始分项输出见 `profiling/tensor_core/doc_raw/tc_04_wgmma_tma_ws.txt`（与 cuda_core 的 doc_raw 对称，可由 `profiling/tensor_core/collect_doc_ncu.sh` 复跑）。

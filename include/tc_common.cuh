@@ -41,8 +41,8 @@ static inline void tc_cublas_bf16(int M,int N,int K,
 typedef void(*TCLaunch)(int M,int N,int K,
         const __nv_bfloat16* A,const __nv_bfloat16* B,float* C);
 
-// 跑一个用例：对拍 cuBLAS + 计时 + 利用率。
-static inline void tc_run(const char* name, TCLaunch launch, int M,int N,int K){
+// ---- 正确性：与 cuBLAS BF16 对拍（allclose atol=rtol=5e-2，bf16 误差略大）----
+static inline void tc_verify(const char* name, TCLaunch launch, int M,int N,int K){
     size_t nA=(size_t)M*K, nB=(size_t)K*N, nC=(size_t)M*N;
     __nv_bfloat16 *hA=(__nv_bfloat16*)malloc(nA*2),*hB=(__nv_bfloat16*)malloc(nB*2);
     srand(0);
@@ -53,8 +53,6 @@ static inline void tc_run(const char* name, TCLaunch launch, int M,int N,int K){
     TC_CHECK_CUDA(cudaMalloc(&dC,nC*4)); TC_CHECK_CUDA(cudaMalloc(&dR,nC*4));
     TC_CHECK_CUDA(cudaMemcpy(dA,hA,nA*2,cudaMemcpyHostToDevice));
     TC_CHECK_CUDA(cudaMemcpy(dB,hB,nB*2,cudaMemcpyHostToDevice));
-
-    // ---- 正确性：与 cuBLAS BF16 对拍（allclose atol=rtol=5e-2，bf16 误差略大）----
     TC_CHECK_CUDA(cudaMemset(dC,0,nC*4));
     launch(M,N,K,dA,dB,dC); TC_CHECK_CUDA(cudaGetLastError()); TC_CHECK_CUDA(cudaDeviceSynchronize());
     tc_cublas_bf16(M,N,K,dA,dB,dR); TC_CHECK_CUDA(cudaDeviceSynchronize());
@@ -65,8 +63,22 @@ static inline void tc_run(const char* name, TCLaunch launch, int M,int N,int K){
     for(size_t i=0;i<nC;i++){ double ae=fabs((double)hC[i]-hRr[i]);
         if(ae>ma) ma=ae; if(ae>5e-2+5e-2*fabs(hRr[i])) bad++; }
     printf("[%s] VERIFY max_abs=%.3e bad=%d/%zu  %s\n", name, ma, bad, nC, bad?"FAIL":"PASS");
+    cudaFree(dA);cudaFree(dB);cudaFree(dC);cudaFree(dR);
+    free(hA);free(hB);free(hC);free(hRr);
+}
 
-    // ---- 性能：best-of，handle/分配都在计时外 ----
+// ---- 性能：best-of，handle/分配都在计时外 ----
+static inline void tc_bench(const char* name, TCLaunch launch, int M,int N,int K){
+    size_t nA=(size_t)M*K, nB=(size_t)K*N, nC=(size_t)M*N;
+    __nv_bfloat16 *hA=(__nv_bfloat16*)malloc(nA*2),*hB=(__nv_bfloat16*)malloc(nB*2);
+    srand(0);
+    for(size_t i=0;i<nA;i++) hA[i]=tc_f2bf((float)rand()/RAND_MAX*2-1);
+    for(size_t i=0;i<nB;i++) hB[i]=tc_f2bf((float)rand()/RAND_MAX*2-1);
+    __nv_bfloat16 *dA,*dB; float *dC;
+    TC_CHECK_CUDA(cudaMalloc(&dA,nA*2)); TC_CHECK_CUDA(cudaMalloc(&dB,nB*2));
+    TC_CHECK_CUDA(cudaMalloc(&dC,nC*4));
+    TC_CHECK_CUDA(cudaMemcpy(dA,hA,nA*2,cudaMemcpyHostToDevice));
+    TC_CHECK_CUDA(cudaMemcpy(dB,hB,nB*2,cudaMemcpyHostToDevice));
     int warm=3, rep=20;
     for(int i=0;i<warm;i++) launch(M,N,K,dA,dB,dC);
     TC_CHECK_CUDA(cudaDeviceSynchronize());
@@ -78,6 +90,12 @@ static inline void tc_run(const char* name, TCLaunch launch, int M,int N,int K){
     double gf=2.0*M*N*K/(ms/1e3)/1e9;
     printf("[%s] M=%d N=%d K=%d  time=%.4f ms  GFLOPS=%.2f  util(vs148T)=%.1f%%\n",
            name, M,N,K, ms, gf, gf/TC_PEAK_BF16_GFLOPS*100.0);
-    cudaFree(dA);cudaFree(dB);cudaFree(dC);cudaFree(dR);
-    free(hA);free(hB);free(hC);free(hRr);
+    cudaFree(dA);cudaFree(dB);cudaFree(dC);
+    free(hA);free(hB);
+}
+
+// 兼容：完整跑一遍（verify + bench），供需要时单独调用。
+static inline void tc_run(const char* name, TCLaunch launch, int M,int N,int K){
+    tc_verify(name, launch, M,N,K);
+    tc_bench (name, launch, M,N,K);
 }

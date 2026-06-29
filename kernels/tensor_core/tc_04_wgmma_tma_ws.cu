@@ -96,7 +96,7 @@ static void create_tensor_map(CUtensorMap* tma, __nv_bfloat16* g, int bh, int bw
     if(r!=CUDA_SUCCESS) printf("cuTensorMapEncodeTiled failed: %d\n",(int)r);
 }
 
-template<int BM,int BN,int BK,int QSIZE> struct SMem{
+template<int BM,int BN,int BK,int QSIZE> struct SMem04{
     alignas(128) __nv_bfloat16 A[BM*BK*QSIZE];
     alignas(128) __nv_bfloat16 B[BK*BN*QSIZE];
 };
@@ -114,7 +114,7 @@ wgmma_kernel(int M,int N,int K,float* C,
     if(bx>=div_ceil(N,BN)||by>=div_ceil(M,BM)) return;
 
     extern __shared__ __align__(128) uint8_t smem[];
-    SMem<BM,BN,BK,K_STAGE>& s=*reinterpret_cast<SMem<BM,BN,BK,K_STAGE>*>(smem);
+    SMem04<BM,BN,BK,K_STAGE>& s=*reinterpret_cast<SMem04<BM,BN,BK,K_STAGE>*>(smem);
     __nv_bfloat16* s_a=s.A; __nv_bfloat16* s_b=s.B;
 
 #pragma nv_diag_suppress static_var_with_dynamic_init
@@ -204,7 +204,7 @@ void cublas_bf16_ref(cublasHandle_t h,int M,int N,int K,const __nv_bfloat16*A,co
 constexpr int BM=128,BN=128,BK=64,QSIZE=3,THREADS=256;
 
 void run_wgmma(int M,int N,int K,float* dC,const __nv_bfloat16* dBt,CUtensorMap* tmaA,CUtensorMap* tmaB){
-    int smem=sizeof(SMem<BM,BN,BK,QSIZE>);
+    int smem=sizeof(SMem04<BM,BN,BK,QSIZE>);
     static bool set=false;
     if(!set){ CHECK_CUDA(cudaFuncSetAttribute(
         wgmma_kernel<64,128,16,BM,BN,BK,THREADS,QSIZE>,
@@ -213,35 +213,32 @@ void run_wgmma(int M,int N,int K,float* dC,const __nv_bfloat16* dBt,CUtensorMap*
     wgmma_kernel<64,128,16,BM,BN,BK,THREADS,QSIZE><<<grid,block,smem>>>(M,N,K,dC,nullptr,nullptr,tmaA,tmaB);
 }
 
-int main(int argc,char**argv){
-    int M=4096,N=4096,K=4096;
-    if(argc==4){ M=atoi(argv[1]);N=atoi(argv[2]);K=atoi(argv[3]); }
+// ============================================================================
+// 派发入口（由 tensor_core/{verify,bench} 按 id 调用，不再各自带 main）。
+// tc_04 是 bespoke harness：TMA tensor map + B 转置 + cuBLAS BF16 参考，签名与
+// tc_01-03 的 TCLaunch 不同，故各自实现 verify()/bench()。setup 在两入口里各做一遍
+// （与 tc_05 同风格），保证每个入口自洽。
+// ============================================================================
+void tc04_verify(int M,int N,int K){
     cuInit(0);
-    if(M%BM||N%BN||K%BK){ printf("need M%%%d==0,N%%%d==0,K%%%d==0\n",BM,BN,BK); return 1; }
-
+    if(M%BM||N%BN||K%BK){ printf("[tc_04] need M%%%d==0,N%%%d==0,K%%%d==0\n",BM,BN,BK); return; }
     size_t nA=(size_t)M*K,nB=(size_t)K*N,nC=(size_t)M*N;
     __nv_bfloat16 *hA=(__nv_bfloat16*)malloc(nA*2),*hB=(__nv_bfloat16*)malloc(nB*2);
     srand(0); for(size_t i=0;i<nA;i++) hA[i]=f2bf((float)rand()/RAND_MAX*2-1);
     for(size_t i=0;i<nB;i++) hB[i]=f2bf((float)rand()/RAND_MAX*2-1);
-
     __nv_bfloat16 *dA,*dB,*dBt; float *dC,*dCref;
     CHECK_CUDA(cudaMalloc(&dA,nA*2)); CHECK_CUDA(cudaMalloc(&dB,nB*2)); CHECK_CUDA(cudaMalloc(&dBt,nB*2));
     CHECK_CUDA(cudaMalloc(&dC,nC*4)); CHECK_CUDA(cudaMalloc(&dCref,nC*4));
     CHECK_CUDA(cudaMemcpy(dA,hA,nA*2,cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(dB,hB,nB*2,cudaMemcpyHostToDevice));
     transpose_bf16<<<div_ceil(K*N,256),256>>>(dB,dBt,K,N); CHECK_CUDA(cudaDeviceSynchronize());
-
-    // TMA maps: A(MxK) box(BM,BK); Bt(NxK) box(BN,BK)
     CUtensorMap tA,tB,*dtA,*dtB;
     create_tensor_map<BM,BK>(&tA,dA,M/BM,K/BK);
     create_tensor_map<BN,BK>(&tB,dBt,N/BN,K/BK);
     CHECK_CUDA(cudaMalloc(&dtA,sizeof(CUtensorMap))); CHECK_CUDA(cudaMalloc(&dtB,sizeof(CUtensorMap)));
     CHECK_CUDA(cudaMemcpy(dtA,&tA,sizeof(CUtensorMap),cudaMemcpyHostToDevice));
     CHECK_CUDA(cudaMemcpy(dtB,&tB,sizeof(CUtensorMap),cudaMemcpyHostToDevice));
-
     cublasHandle_t h; CHECK_CUBLAS(cublasCreate(&h));
-
-    // ---- verify ----
     CHECK_CUDA(cudaMemset(dC,0,nC*4));
     run_wgmma(M,N,K,dC,dBt,dtA,dtB); CHECK_CUDA(cudaGetLastError()); CHECK_CUDA(cudaDeviceSynchronize());
     cublas_bf16_ref(h,M,N,K,dA,dB,dCref); CHECK_CUDA(cudaDeviceSynchronize());
@@ -251,9 +248,32 @@ int main(int argc,char**argv){
     double ma=0,mr=0; int bad=0;
     for(size_t i=0;i<nC;i++){ double ae=fabs((double)hC[i]-hR[i]); double re=ae/(fabs(hR[i])+1e-5);
         if(ae>ma)ma=ae; if(re>mr)mr=re; if(ae>5e-2+5e-2*fabs(hR[i])) bad++; }
-    printf("VERIFY: max_abs=%.3e max_rel=%.3e bad=%d/%zu  %s\n",ma,mr,bad,nC,(bad==0?"PASS":"FAIL"));
+    printf("[tc_04 WGMMA] VERIFY max_abs=%.3e max_rel=%.3e bad=%d/%zu  %s\n",ma,mr,bad,nC,(bad==0?"PASS":"FAIL"));
+    cublasDestroy(h);
+    cudaFree(dA);cudaFree(dB);cudaFree(dBt);cudaFree(dC);cudaFree(dCref);cudaFree(dtA);cudaFree(dtB);
+    free(hA);free(hB);free(hC);free(hR);
+}
 
-    // ---- bench ----
+void tc04_bench(int M,int N,int K){
+    cuInit(0);
+    if(M%BM||N%BN||K%BK){ printf("[tc_04] need M%%%d==0,N%%%d==0,K%%%d==0\n",BM,BN,BK); return; }
+    size_t nA=(size_t)M*K,nB=(size_t)K*N,nC=(size_t)M*N;
+    __nv_bfloat16 *hA=(__nv_bfloat16*)malloc(nA*2),*hB=(__nv_bfloat16*)malloc(nB*2);
+    srand(0); for(size_t i=0;i<nA;i++) hA[i]=f2bf((float)rand()/RAND_MAX*2-1);
+    for(size_t i=0;i<nB;i++) hB[i]=f2bf((float)rand()/RAND_MAX*2-1);
+    __nv_bfloat16 *dA,*dB,*dBt; float *dC,*dCref;
+    CHECK_CUDA(cudaMalloc(&dA,nA*2)); CHECK_CUDA(cudaMalloc(&dB,nB*2)); CHECK_CUDA(cudaMalloc(&dBt,nB*2));
+    CHECK_CUDA(cudaMalloc(&dC,nC*4)); CHECK_CUDA(cudaMalloc(&dCref,nC*4));
+    CHECK_CUDA(cudaMemcpy(dA,hA,nA*2,cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(dB,hB,nB*2,cudaMemcpyHostToDevice));
+    transpose_bf16<<<div_ceil(K*N,256),256>>>(dB,dBt,K,N); CHECK_CUDA(cudaDeviceSynchronize());
+    CUtensorMap tA,tB,*dtA,*dtB;
+    create_tensor_map<BM,BK>(&tA,dA,M/BM,K/BK);
+    create_tensor_map<BN,BK>(&tB,dBt,N/BN,K/BK);
+    CHECK_CUDA(cudaMalloc(&dtA,sizeof(CUtensorMap))); CHECK_CUDA(cudaMalloc(&dtB,sizeof(CUtensorMap)));
+    CHECK_CUDA(cudaMemcpy(dtA,&tA,sizeof(CUtensorMap),cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(dtB,&tB,sizeof(CUtensorMap),cudaMemcpyHostToDevice));
+    cublasHandle_t h; CHECK_CUBLAS(cublasCreate(&h));
     int warm=3,rep=20;
     for(int i=0;i<warm;i++) run_wgmma(M,N,K,dC,dBt,dtA,dtB);
     CHECK_CUDA(cudaDeviceSynchronize());
@@ -263,10 +283,9 @@ int main(int argc,char**argv){
     cudaEventRecord(e); cudaEventSynchronize(e);
     float ms=0; cudaEventElapsedTime(&ms,s,e); ms/=rep;
     double gf=2.0*M*N*K/(ms/1e3)/1e9;
-    printf("WGMMA(TMA+WS)      M=%d N=%d K=%d  time=%.4f ms  GFLOPS=%.2f  util(vs148T)=%.1f%%\n",
+    printf("[tc_04 WGMMA] M=%d N=%d K=%d  time=%.4f ms  GFLOPS=%.2f  util(vs148T)=%.1f%%\n",
            M,N,K,ms,gf,gf/148000.0*100.0);
-
-    // ---- fair cuBLAS BF16: handle 复用(不在计时内 create/destroy) ----
+    // fair cuBLAS BF16: handle 复用(不在计时内 create/destroy)
     for(int i=0;i<warm;i++) cublas_bf16_ref(h,M,N,K,dA,dB,dCref);
     CHECK_CUDA(cudaDeviceSynchronize());
     cudaEventRecord(s);
@@ -274,7 +293,9 @@ int main(int argc,char**argv){
     cudaEventRecord(e); cudaEventSynchronize(e);
     float msb=0; cudaEventElapsedTime(&msb,s,e); msb/=rep;
     double gfb=2.0*M*N*K/(msb/1e3)/1e9;
-    printf("cuBLAS BF16 (fair) M=%d N=%d K=%d  time=%.4f ms  GFLOPS=%.2f  util(vs148T)=%.1f%%\n",
+    printf("[tc_04 cuBLAS BF16 fair] M=%d N=%d K=%d  time=%.4f ms  GFLOPS=%.2f  util(vs148T)=%.1f%%\n",
            M,N,K,msb,gfb,gfb/148000.0*100.0);
-    return 0;
+    cublasDestroy(h);
+    cudaFree(dA);cudaFree(dB);cudaFree(dBt);cudaFree(dC);cudaFree(dCref);cudaFree(dtA);cudaFree(dtB);
+    free(hA);free(hB);
 }

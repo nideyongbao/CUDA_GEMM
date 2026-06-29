@@ -1,6 +1,6 @@
 // BF16 benchmark：A/B 为 bf16，C 为 fp32；输出 GFLOPS 及对 H20 BF16
 // Tensor Core 峰值(148 TFLOPS)的利用率。
-#include "../include/bf16.h"
+#include "../../include/bf16.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>

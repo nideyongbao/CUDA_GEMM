@@ -1,19 +1,19 @@
-[2922645] tc_04_wgmma_tma_ws@127.0.0.1
+[3154732] bench@127.0.0.1
   void wgmma_kernel<64, 128, 16, 128, 128, 64, 256, 3>(int, int, int, float *, const __nv_bfloat16 *, const __nv_bfloat16 *, const CUtensorMap_st *, const CUtensorMap_st *) (16, 16, 1)x(256, 1, 1), Context 1, Stream 7, Device 0, CC 9.0
     Section: GPU Speed Of Light Throughput
     ----------------------- ----------- ------------
     Metric Name             Metric Unit Metric Value
     ----------------------- ----------- ------------
     DRAM Frequency                  Ghz         2.62
-    SM Frequency                    Ghz         1.69
-    Elapsed Cycles                cycle      325,933
-    Memory Throughput                 %        16.78
-    DRAM Throughput                   %         2.47
-    Duration                         us       190.88
-    L1/TEX Cache Throughput           %        20.73
-    L2 Cache Throughput               %        11.48
-    SM Active Cycles              cycle   259,739.01
-    Compute (SM) Throughput           %        67.03
+    SM Frequency                    Ghz         1.68
+    Elapsed Cycles                cycle      325,890
+    Memory Throughput                 %        16.72
+    DRAM Throughput                   %         2.49
+    Duration                         us       190.85
+    L1/TEX Cache Throughput           %        20.74
+    L2 Cache Throughput               %        11.39
+    SM Active Cycles              cycle   259,581.62
+    Compute (SM) Throughput           %        66.82
     ----------------------- ----------- ------------
 
     OPT   Compute is more heavily utilized than Memory: Look at the Compute Workload Analysis section to see what the   
@@ -44,37 +44,36 @@
     Executed Ipc Elapsed  inst/cycle         0.16
     Issue Slots Busy               %         4.83
     Issued Ipc Active     inst/cycle         0.19
-    SM Busy                        %        82.81
+    SM Busy                        %        82.86
     -------------------- ----------- ------------
 
-    INF   Shared is the highest-utilized pipeline (20.7%) based on active cycles, taking into account the rates of its  
-          different instructions. It is the logical sum of several other pipelines which can't achieve full             
-          utilization on their own. It executes 64-bit floating point and tensor operations. It's dominated by its      
+    INF   Tensor is the highest-utilized pipeline (20.7%) based on active cycles, taking into account the rates of its  
+          different instructions. It is the logical aggregation of individual tensor pipelines. It's dominated by its   
           Tensor (FP) sub-pipeline. It is well-utilized, but should not be a bottleneck.                                
 
     Section: Memory Workload Analysis
     ---------------------------- ----------- ------------
     Metric Name                  Metric Unit Metric Value
     ---------------------------- ----------- ------------
-    Memory Throughput                Gbyte/s        99.36
-    Mem Busy                               %        16.78
-    Max Bandwidth                          %        16.76
+    Memory Throughput                Gbyte/s        99.96
+    Mem Busy                               %        16.72
+    Max Bandwidth                          %        16.70
     L1/TEX Hit Rate                        %        37.79
     L2 Compression Success Rate            %            0
     L2 Compression Ratio                   %            0
-    L2 Compression Input Sectors                1,050,427
-    L2 Hit Rate                            %        89.55
-    Mem Pipes Busy                         %         9.51
+    L2 Compression Input Sectors                1,051,677
+    L2 Hit Rate                            %        88.37
+    Mem Pipes Busy                         %         9.48
     ---------------------------- ----------- ------------
 
     Section: Memory Workload Analysis Chart
-    OPT   Est. Speedup: 1.887%                                                                                          
-          Out of the 33613664.0 bytes sent to the L2 Compression unit only 0.00% were successfully compressed. To       
+    OPT   Est. Speedup: 1.891%                                                                                          
+          Out of the 33653664.0 bytes sent to the L2 Compression unit only 0.00% were successfully compressed. To       
           increase this success rate, consider marking only those memory regions as compressible that contain the most  
           zero values and/or expose the most homogeneous values.                                                        
 
     Section: Memory Workload Analysis Tables
-    OPT   Est. Speedup: 8.388%                                                                                          
+    OPT   Est. Speedup: 8.362%                                                                                          
           The memory access pattern for global stores to L1TEX might not be optimal. On average, only 16.0 of the 32    
           bytes transmitted per sector are utilized by each thread. This could possibly be caused by a stride between   
           threads. Check the Source Counters section for uncoalesced global stores.                                     
@@ -90,7 +89,7 @@
     Eligible Warps Per Scheduler        warp         0.05
     ---------------------------- ----------- ------------
 
-    OPT   Est. Local Speedup: 32.97%                                                                                    
+    OPT   Est. Local Speedup: 33.18%                                                                                    
           Every scheduler is capable of issuing one instruction per cycle, but for this workload each scheduler only    
           issues an instruction every 20.7 cycles. This might leave hardware resources underutilized and may lead to    
           less optimal performance. Out of the maximum of 16 warps per scheduler, this workload allocates an average    
@@ -104,13 +103,13 @@
     ---------------------------------------- ----------- ------------
     Metric Name                              Metric Unit Metric Value
     ---------------------------------------- ----------- ------------
-    Warp Cycles Per Issued Instruction             cycle        25.14
-    Warp Cycles Per Executed Instruction           cycle        25.16
+    Warp Cycles Per Issued Instruction             cycle        25.18
+    Warp Cycles Per Executed Instruction           cycle        25.20
     Avg. Active Threads Per Warp                                28.97
     Avg. Not Predicated Off Threads Per Warp                    28.90
     ---------------------------------------- ----------- ------------
 
-    OPT   Est. Speedup: 32.97%                                                                                          
+    OPT   Est. Speedup: 33.18%                                                                                          
           On average, each warp of this workload spends 13.5 cycles being stalled waiting for sibling warps at a CTA    
           barrier. A high number of warps waiting at a barrier is commonly caused by diverging code paths before a      
           barrier. This causes some warps to wait a long time until other warps reach the synchronization point.        
@@ -118,7 +117,7 @@
           threads or greater, consider splitting it into smaller groups. This can increase eligible warps without       
           affecting occupancy, unless shared memory becomes a new occupancy limiter. Also, try to identify which        
           barrier instruction causes the most stalls, and optimize the code executed before that synchronization point  
-          first. This stall type represents about 53.5% of the total average of 25.1 cycles between issuing two         
+          first. This stall type represents about 53.4% of the total average of 25.2 cycles between issuing two         
           instructions.                                                                                                 
     ----- --------------------------------------------------------------------------------------------------------------
     INF   Check the Warp Stall Sampling (All Samples) table for the top stall locations in your source based on         
@@ -188,7 +187,7 @@
     Achieved Active Warps Per SM           warp         4.85
     ------------------------------- ----------- ------------
 
-    OPT   Est. Speedup: 32.97%                                                                                          
+    OPT   Est. Speedup: 33.18%                                                                                          
           The 2.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
           hardware maximum of 16. This kernel's theoretical occupancy (12.5%) is limited by the number of required      
           registers, and the required amount of shared memory.                                                          
@@ -197,35 +196,35 @@
     -------------------------- ----------- ------------
     Metric Name                Metric Unit Metric Value
     -------------------------- ----------- ------------
-    Average DRAM Active Cycles       cycle    12,347.83
-    Total DRAM Elapsed Cycles        cycle   23,990,144
-    Average L1 Active Cycles         cycle   259,739.01
-    Total L1 Elapsed Cycles          cycle   25,029,854
-    Average L2 Active Cycles         cycle   209,254.26
-    Total L2 Elapsed Cycles          cycle   31,222,272
-    Average SM Active Cycles         cycle   259,739.01
-    Total SM Elapsed Cycles          cycle   25,029,854
-    Average SMSP Active Cycles       cycle   259,562.50
-    Total SMSP Elapsed Cycles        cycle  100,119,416
+    Average DRAM Active Cycles       cycle    12,419.67
+    Total DRAM Elapsed Cycles        cycle   23,986,688
+    Average L1 Active Cycles         cycle   259,581.62
+    Total L1 Elapsed Cycles          cycle   25,109,860
+    Average L2 Active Cycles         cycle   204,690.99
+    Total L2 Elapsed Cycles          cycle   31,214,304
+    Average SM Active Cycles         cycle   259,581.62
+    Total SM Elapsed Cycles          cycle   25,109,860
+    Average SMSP Active Cycles       cycle   259,637.82
+    Total SMSP Elapsed Cycles        cycle  100,439,440
     -------------------------- ----------- ------------
 
-    OPT   Est. Speedup: 14.35%                                                                                          
+    OPT   Est. Speedup: 14.29%                                                                                          
           One or more SMs have a much higher number of active cycles than the average number of active cycles. Maximum  
-          instance value is 17.73% above the average, while the minimum instance value is 8.78% below the average.      
+          instance value is 17.72% above the average, while the minimum instance value is 8.76% below the average.      
     ----- --------------------------------------------------------------------------------------------------------------
-    OPT   Est. Speedup: 14.31%                                                                                          
+    OPT   Est. Speedup: 14.28%                                                                                          
           One or more SMSPs have a much higher number of active cycles than the average number of active cycles.        
-          Maximum instance value is 17.69% above the average, while the minimum instance value is 8.89% below the       
+          Maximum instance value is 17.71% above the average, while the minimum instance value is 8.77% below the       
           average.                                                                                                      
     ----- --------------------------------------------------------------------------------------------------------------
-    OPT   Est. Speedup: 14.35%                                                                                          
+    OPT   Est. Speedup: 14.29%                                                                                          
           One or more L1 Slices have a much higher number of active cycles than the average number of active cycles.    
-          Maximum instance value is 17.73% above the average, while the minimum instance value is 8.78% below the       
+          Maximum instance value is 17.72% above the average, while the minimum instance value is 8.76% below the       
           average.                                                                                                      
     ----- --------------------------------------------------------------------------------------------------------------
-    OPT   Est. Speedup: 8.204%                                                                                          
+    OPT   Est. Speedup: 9.255%                                                                                          
           One or more L2 Slices have a much lower number of active cycles than the average number of active cycles.     
-          Maximum instance value is 12.75% above the average, while the minimum instance value is 16.73% below the      
+          Maximum instance value is 14.70% above the average, while the minimum instance value is 18.21% below the      
           average.                                                                                                      
 
     Section: Source Counters
@@ -238,7 +237,7 @@
     Avg. Divergent Branches                       0.82
     ------------------------- ----------- ------------
 
-    OPT   Est. Speedup: 32.17%                                                                                          
+    OPT   Est. Speedup: 31.48%                                                                                          
           This kernel has uncoalesced global accesses resulting in a total of 524288 excessive sectors (50% of the      
           total 1048576 sectors). Check the L2 Theoretical Sectors Global Excessive table for the primary source        
           locations. The CUDA Programming Guide                                                                         

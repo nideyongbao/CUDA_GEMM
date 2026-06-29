@@ -14,7 +14,7 @@
 | FP32 (CUDA core) 峰值 | **~40–44 TFLOPS** |
 | FP16/BF16 Tensor Core 峰值 | **~148 TFLOPS**（TF32 ~74，FP8 ~296） |
 
-注意：本项目所有 kernel 都是 **FP32 + CUDA core**，从不使用 Tensor Core，因此天花板是 ~40 TFLOPS 那一列，而不是 ~148 TFLOPS。这也是它能作为"Hopper GEMM 前置课"、但还不是"Hopper GEMM 教程"的根本原因。
+本项目分两条引擎线：**CUDA core 线**（`kernels/cuda_core/`，FP32 naive→double_buffer，外加 BF16 数据类型对照）天花板是 ~40 TFLOPS 那一列；**Tensor Core 线**（`kernels/tensor_core/`，WMMA→WGMMA→FP8）天花板才是 ~148 TFLOPS（FP8 ~296）。下面 00–07 分析 CUDA core 线（瓶颈始终在访存/SRAM/调度，撞不到 FP32 算力墙的下方），08–12 分析 Tensor Core 线。所有数字均为 **H20 实测**（CUDA core ncu 见 docs 02–07，4096³；Tensor core 见 docs 08–12，2048³）。
 
 ## 1、全局图
 SM 是 GPU 里的"计算引擎集群"，是 GPU 并行执行的基本硬件单元。一块 GPU 由几十到上百个 SM 并列组成，每个 SM 内部包含若干 CUDA Core（或 Tensor Core）、寄存器堆、shared memory、warp 调度器等完整的执行资源。**理解 GPU 硬件的核心就是理解一个 SM 的内部结构**，因为 CUDA 的所有性能优化（coalescing、bank conflict、occupancy）本质上都是在分析对 SM 内部资源的使用效率。在一个sm内部，按数据流向分四块
@@ -77,11 +77,13 @@ MIO（Memory Input/Output pipeline）是 SM 内部的**访存指令派发队列*
 
 ## 总结
 
-| SM 部件          | 它的瓶颈指标                      | 哪一代撞上                              | 怎么治                 |
+下表"H20 实测"列均为本项目 4096³ 真实 ncu 值（详见 docs 02–07）：
+
+| SM 部件          | 它的瓶颈指标                      | H20 实测表现                              | 怎么治                 |
 | -------------- | --------------------------- | ---------------------------------- | ------------------- |
-| DRAM 带宽        | DRAM Throughput             | naive(21%,没用上)→ vectorized(57%,逼近) | tiling 提高算术强度       |
-| L1/TEX SRAM    | L1/TEX Throughput           | 全程高(含义随上下文变)                       | —                   |
-| MIO 发射队列       | mio_throttle, LSU指令数        | smem(27.5,LDS塞爆)                   | 向量化/warptile 减指令条数  |
-| Warp Scheduler | Eligible, No-Eligible       | naive(同时等DRAM)、2D(63%没藏住)          | 双缓冲(load/compute重叠) |
-| 寄存器堆           | Reg/Thread, Block Limit Reg | 2D(96,occ降62%)                     | 主动权衡,换ILP           |
-| FP32 单元        | math_pipe_throttle          | 逐代缓升(接近算力墙是好天花板)                   | 接近此处=优化到头           |
+| DRAM 带宽        | DRAM Throughput             | 全程低：naive 4.4% → double_buffer 4.8%（4TB/s HBM3 + 60MB L2 吸收复用，**从不成为瓶颈**） | tiling 提高算术强度       |
+| L1/TEX SRAM    | L1/TEX Throughput           | naive 73.9% → smem 90.6%(峰) → register tile 压回 79% → warp tile 67%（**H20 无 Turing 上的 98% SRAM 墙**） | warp tile 摊薄 shared 访问 |
+| MIO 发射队列       | mio_throttle, LSU指令数        | smem 21.7（LDS 塞爆）→ register tile 0.2（根治） | 向量化/warptile 减指令条数  |
+| Warp Scheduler | Eligible, No-Eligible       | naive Eligible 3.14/16、No-Elig 57.8% → double_buffer No-Elig 21.8% | ILP + 双缓冲(load/compute 重叠) |
+| 寄存器堆           | Reg/Thread, Block Limit Reg | naive 32 → 2D 96(occ 30%) → 标量 warptile 211(occ 12%,**负优化**) → double_buffer 127(occ 24%) | 主动权衡,换 ILP           |
+| FP32 单元        | math_pipe_throttle, Compute(SM) | double_buffer Compute 75.6%（手写最高，~57% FP32 峰值）           | 接近此处=优化到头           |

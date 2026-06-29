@@ -1,0 +1,152 @@
+### P1 SOL (ncu --set basic)
+[3206958] bench@127.0.0.1
+  bank_conflict_kernel(int, int, int, float, const float *, const float *, float, float *) (32, 64, 1)x(128, 1, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: GPU Speed Of Light Throughput
+    ----------------------- ----------- -------------
+    Metric Name             Metric Unit  Metric Value
+    ----------------------- ----------- -------------
+    DRAM Frequency                  Ghz          2.62
+    SM Frequency                    Ghz          1.83
+    Elapsed Cycles                cycle    12,607,869
+    Memory Throughput                 %         57.83
+    DRAM Throughput                   %          2.44
+    Duration                         ms          6.89
+    L1/TEX Cache Throughput           %         60.58
+    L2 Cache Throughput               %          8.88
+    SM Active Cycles              cycle 12,020,351.44
+    Compute (SM) Throughput           %         71.54
+    ----------------------- ----------- -------------
+
+    OPT   Compute is more heavily utilized than Memory: Look at the Compute Workload Analysis section to see what the   
+          compute pipelines are spending their time doing. Also, consider whether any computation is redundant and      
+          could be reduced or moved to look-up tables.                                                                  
+
+    Section: Launch Statistics
+    -------------------------------- --------------- ---------------
+    Metric Name                          Metric Unit    Metric Value
+    -------------------------------- --------------- ---------------
+    Block Size                                                   128
+    Cluster Scheduling Policy                           PolicySpread
+    Cluster Size                                                   0
+    Function Cache Configuration                     CachePreferNone
+    Grid Size                                                  2,048
+    Registers Per Thread             register/thread             107
+    Shared Memory Configuration Size           Kbyte           65.54
+    Driver Shared Memory Per Block       Kbyte/block            1.02
+    Dynamic Shared Memory Per Block       byte/block               0
+    Static Shared Memory Per Block       Kbyte/block            6.27
+    # SMs                                         SM              78
+    Stack Size                                                 1,024
+    Threads                                   thread         262,144
+    # TPCs                                                        39
+    Enabled TPC IDs                                              all
+    Uses Green Context                                             0
+    Waves Per SM                                                6.56
+    -------------------------------- --------------- ---------------
+
+    Section: Occupancy
+    ------------------------------- ----------- ------------
+    Metric Name                     Metric Unit Metric Value
+    ------------------------------- ----------- ------------
+    Max Active Clusters                 cluster            0
+    Max Cluster Size                      block            8
+    Overall GPU Occupancy                     %            0
+    Cluster Occupancy                         %            0
+    Block Limit Barriers                  block           32
+    Block Limit SM                        block           32
+    Block Limit Registers                 block            4
+    Block Limit Shared Mem                block            8
+    Block Limit Warps                     block           16
+    Theoretical Active Warps per SM        warp           16
+    Theoretical Occupancy                     %           25
+    Achieved Occupancy                        %        24.18
+    Achieved Active Warps Per SM           warp        15.48
+    ------------------------------- ----------- ------------
+
+    OPT   Est. Local Speedup: 75%                                                                                       
+          The 4.00 theoretical warps per scheduler this kernel can issue according to its occupancy are below the       
+          hardware maximum of 16. This kernel's theoretical occupancy (25.0%) is limited by the number of required      
+          registers.                                                                                                    
+
+    Section: GPU and Memory Workload Distribution
+    -------------------------- ----------- -------------
+    Metric Name                Metric Unit  Metric Value
+    -------------------------- ----------- -------------
+    Average DRAM Active Cycles       cycle    440,923.50
+    Total DRAM Elapsed Cycles        cycle   866,120,448
+    Average L1 Active Cycles         cycle 12,020,351.44
+    Total L1 Elapsed Cycles          cycle   982,208,498
+    Average L2 Active Cycles         cycle 11,328,120.98
+    Total L2 Elapsed Cycles          cycle 1,130,474,688
+    Average SM Active Cycles         cycle 12,020,351.44
+    Total SM Elapsed Cycles          cycle   982,208,498
+    Average SMSP Active Cycles       cycle 12,025,189.53
+    Total SMSP Elapsed Cycles        cycle 3,928,833,992
+    -------------------------- ----------- -------------
+
+
+### P2 STALLS (WarpStateStats + stall ratio)
+[3207048] bench@127.0.0.1
+  bank_conflict_kernel(int, int, int, float, const float *, const float *, float, float *) (32, 64, 1)x(128, 1, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Command line profiler metrics
+    --------------------------------------------------------------------------- ----------- ------------
+    Metric Name                                                                 Metric Unit Metric Value
+    --------------------------------------------------------------------------- ----------- ------------
+    smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio           inst         0.46
+    smsp__average_warps_issue_stalled_math_pipe_throttle_per_issue_active.ratio        inst         0.29
+    smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio              inst         0.01
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio          inst         0.93
+    --------------------------------------------------------------------------- ----------- ------------
+
+    Section: Warp State Statistics
+    ---------------------------------------- ----------- ------------
+    Metric Name                              Metric Unit Metric Value
+    ---------------------------------------- ----------- ------------
+    Warp Cycles Per Issued Instruction             cycle         5.18
+    Warp Cycles Per Executed Instruction           cycle         5.18
+    Avg. Active Threads Per Warp                                   32
+    Avg. Not Predicated Off Threads Per Warp                    31.95
+    ---------------------------------------- ----------- ------------
+
+    WRN   The optional metric smsp__pcsamp_sample_count could not be found. Collecting it as an additional metric could 
+          enable the rule to provide more guidance.                                                                     
+
+
+### P3 SCHEDULER (SchedulerStats)
+[3207119] bench@127.0.0.1
+  bank_conflict_kernel(int, int, int, float, const float *, const float *, float, float *) (32, 64, 1)x(128, 1, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Scheduler Statistics
+    ---------------------------- ----------- ------------
+    Metric Name                  Metric Unit Metric Value
+    ---------------------------- ----------- ------------
+    One or More Eligible                   %        74.89
+    Issued Warp Per Scheduler                        0.75
+    No Eligible                            %        25.11
+    Active Warps Per Scheduler          warp         3.89
+    Eligible Warps Per Scheduler        warp         1.85
+    ---------------------------- ----------- ------------
+
+
+### P4 COALESCE (global sectors/req ld,st)
+[3207175] bench@127.0.0.1
+  bank_conflict_kernel(int, int, int, float, const float *, const float *, float, float *) (32, 64, 1)x(128, 1, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Command line profiler metrics
+    -------------------------------------------------------------------- ----------- ------------
+    Metric Name                                                          Metric Unit Metric Value
+    -------------------------------------------------------------------- ----------- ------------
+    l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_ld.ratio      sector         8.16
+    l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_st.ratio      sector           16
+    -------------------------------------------------------------------- ----------- ------------
+
+
+### P5 BANK CONFLICT (shared ld,st)
+[3207256] bench@127.0.0.1
+  bank_conflict_kernel(int, int, int, float, const float *, const float *, float, float *) (32, 64, 1)x(128, 1, 1), Context 1, Stream 7, Device 0, CC 9.0
+    Section: Command line profiler metrics
+    -------------------------------------------------------- ----------- ------------
+    Metric Name                                              Metric Unit Metric Value
+    -------------------------------------------------------- ----------- ------------
+    l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum                  174,038
+    l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st.sum                5,632,486
+    -------------------------------------------------------- ----------- ------------
+

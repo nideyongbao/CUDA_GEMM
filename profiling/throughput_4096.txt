@@ -1,0 +1,35 @@
+######## FP32 throughput @4096^3 (kernels/cuda_core/bench) ########
+cublas_ref: M=4096 N=4096 K=4096, time=4.5410 ms, GFLOPS=30266.16
+naive_kernel: M=4096 N=4096 K=4096, time=38.9106 ms, GFLOPS=3532.17
+smem_kernel: M=4096 N=4096 K=4096, time=25.3974 ms, GFLOPS=5411.54
+blocktiling_kernel: M=4096 N=4096 K=4096, time=14.6050 ms, GFLOPS=9410.42
+Dblocktiling_kernel: M=4096 N=4096 K=4096, time=8.8399 ms, GFLOPS=15547.56
+vectorized_kernel: M=4096 N=4096 K=4096, time=6.0308 ms, GFLOPS=22789.57
+autotune_64x64x8_8x4: M=4096 N=4096 K=4096, time=6.0387 ms, GFLOPS=22759.62
+autotune_64x64x16_8x4: M=4096 N=4096 K=4096, time=6.2893 ms, GFLOPS=21852.87
+autotune_64x64x8_8x8: M=4096 N=4096 K=4096, time=6.9333 ms, GFLOPS=19822.94
+warptile_kernel: M=4096 N=4096 K=4096, time=10.7019 ms, GFLOPS=12842.50
+warptile_vec_kernel: M=4096 N=4096 K=4096, time=5.7336 ms, GFLOPS=23970.72
+bank_conflict_kernel: M=4096 N=4096 K=4096, time=6.3868 ms, GFLOPS=21519.09
+double_buffer_kernel: M=4096 N=4096 K=4096, time=5.4687 ms, GFLOPS=25131.98
+######## BF16 throughput @4096^3 (kernels/cuda_core/bench_bf16) ########
+cublas_bf16            M=4096 N=4096 K=4096  time=1.0400 ms  GFLOPS=132152.84  util(vs148T)=89.3%
+naive                  M=4096 N=4096 K=4096  time=42.5751 ms  GFLOPS=3228.16  util(vs148T)=2.2%
+smem                   M=4096 N=4096 K=4096  time=25.0951 ms  GFLOPS=5476.72  util(vs148T)=3.7%
+blocktiling            M=4096 N=4096 K=4096  time=13.4988 ms  GFLOPS=10181.54  util(vs148T)=6.9%
+2Dblocktiling          M=4096 N=4096 K=4096  time=8.6760 ms  GFLOPS=15841.20  util(vs148T)=10.7%
+vectorized             M=4096 N=4096 K=4096  time=5.8159 ms  GFLOPS=23631.56  util(vs148T)=16.0%
+autotune_64x64x8_8x4   M=4096 N=4096 K=4096  time=5.8202 ms  GFLOPS=23614.21  util(vs148T)=16.0%
+autotune_64x64x16_8x4  M=4096 N=4096 K=4096  time=6.2652 ms  GFLOPS=21936.99  util(vs148T)=14.8%
+autotune_64x64x8_8x8   M=4096 N=4096 K=4096  time=6.7797 ms  GFLOPS=20271.98  util(vs148T)=13.7%
+warptile               M=4096 N=4096 K=4096  time=11.2338 ms  GFLOPS=12234.44  util(vs148T)=8.3%
+warptile_vec           M=4096 N=4096 K=4096  time=5.6179 ms  GFLOPS=24464.37  util(vs148T)=16.5%
+bank_conflict          M=4096 N=4096 K=4096  time=6.1074 ms  GFLOPS=22503.85  util(vs148T)=15.2%
+double_buffer          M=4096 N=4096 K=4096  time=5.3102 ms  GFLOPS=25882.00  util(vs148T)=17.5%
+######## Tensor core throughput @4096^3 (kernels/tensor_core/bench) ########
+[tc_01 WMMA_naive] M=4096 N=4096 K=4096  time=8.2356 ms  GFLOPS=16688.32  util(vs148T)=11.3%
+[tc_02 WMMA_smem] M=4096 N=4096 K=4096  time=4.6288 ms  GFLOPS=29692.11  util(vs148T)=20.1%
+[tc_03 WMMA_pipe] M=4096 N=4096 K=4096  time=3.6114 ms  GFLOPS=38057.07  util(vs148T)=25.7%
+[tc_04 WGMMA] M=4096 N=4096 K=4096  time=1.1515 ms  GFLOPS=119357.03  util(vs148T)=80.6%
+[tc_04 cuBLAS BF16 fair] M=4096 N=4096 K=4096  time=1.0429 ms  GFLOPS=131785.26  util(vs148T)=89.0%
+[tc_05 WGMMA_fp8] M=4096 N=4096 K=4096  time=0.6130 ms  GFLOPS=224225.23  util(vs296T)=75.8%  util(vs148T)=151.5%

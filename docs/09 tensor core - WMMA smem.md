@@ -7,7 +7,7 @@
 
 ## 1、观大局
 ```
-sudo ncu --set full -k regex:"wmma_smem_kernel" -s 1 -c 1 ./tc_02_wmma_smem 2048 2048 2048
+sudo /usr/local/cuda/bin/ncu --set full -k regex:"wmma_smem_kernel" -s 1 -c 1 ./kernels/tensor_core/bench 2 2048 2048 2048
 ```
 
 ```
@@ -26,15 +26,24 @@ sudo ncu --set full -k regex:"wmma_smem_kernel" -s 1 -c 1 ./tc_02_wmma_smem 2048
 
 ## 2、看延迟
 ```
-sudo ncu --section WarpStateStats -k regex:"wmma_smem_kernel" -s 1 -c 1 ./tc_02_wmma_smem 2048 2048 2048
+sudo /usr/local/cuda/bin/ncu --section WarpStateStats \
+  --metrics smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio,\
+smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio,\
+smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio,\
+smsp__average_warps_issue_stalled_barrier_per_issue_active.ratio \
+  -k regex:"wmma_smem_kernel" -s 1 -c 1 ./kernels/tensor_core/bench 2 2048 2048 2048
 ```
 
 ```
-    Warp Cycles Per Issued Instruction       cycle       16.39
-    最高管线（INF）：ALU 32.5%
-    头号 stall：(short)scoreboard ≈ 5.6 cyc 占 34%
+    Warp Cycles Per Issued Instruction                                          cycle        16.38
+    --------------------------------------------------------------------------- ----------- ------------
+    smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio           inst         5.59
+    smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio              inst         2.24
+    smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio          inst         2.22
+    smsp__average_warps_issue_stalled_barrier_per_issue_active.ratio                   inst         0.82
+    --------------------------------------------------------------------------- ----------- ------------
 ```
-关键变化：**warp cyc/issue 从 109 砍到 16.4** —— smem 复用一下子把"等访存"的时间打下来了。但 ncu 提示 **ALU 是最高管线（32.5%）**：现在的瓶颈变成了从 smem 把 fragment 装进寄存器（`load_matrix_sync`）以及地址计算这类 ALU/MIO 指令，张量核还是没完全喂饱（SM Busy 40.9%）。
+关键变化：**warp cyc/issue 从 109 砍到 16.4**（`Warp Cycles Per Issued = 16.38`）—— smem 复用一下子把"等访存"的时间打下来了。各项 stall 用 ratio÷cyc/issue 换算占比：头号是 **long_scoreboard 5.59 → 34.1%**（注意这里是 *long* scoreboard，等的是 global load 回来，不是 smem 的 short scoreboard——short 只有 2.22 → 13.6%），mio_throttle 2.24 → 13.7%，barrier 0.82 → 5.0%。同时 ncu 的 ComputeWorkloadAnalysis 提示 **ALU 是最高管线（32.4%）**：现在的瓶颈变成了从 smem 把 fragment 装进寄存器（`load_matrix_sync`）以及地址计算这类 ALU/MIO 指令，张量核还是没完全喂饱（SM Busy 40.9%）。
 
 ## 3、占用率的代价
 占用率从 naive 的 71% 掉到 42%（每线程寄存器 40→64，smem 也吃资源）。但因为 cyc/issue 大幅下降，整体反而快了——这说明 **occupancy 不是越高越好**，关键是"每个 warp 等得久不久"。这个 trade-off 后面 WGMMA 会推到极致（占用率 7%、却最快）。
@@ -43,3 +52,5 @@ sudo ncu --section WarpStateStats -k regex:"wmma_smem_kernel" -s 1 -c 1 ./tc_02_
 smem staging 是 tensor core 阶梯上最划算的一步：warp cyc/issue 109→16，`Compute (SM)` 16.5%→37.8%，4096³ 实测 16685→**29733 GFLOPS（11.3%→20.1%）**，一举超过最好的 CUDA core kernel。
 
 但还没到头：load_matrix(smem→寄存器) + 同步 `__syncthreads` 让张量核仍有空档。下一步用 **cp.async 把搬运和计算重叠**（见 [10 tensor core - WMMA cp.async pipeline](10%20tensor%20core%20-%20WMMA%20cp.async%20pipeline.md)）。
+
+> 本文 ncu 原始分项输出见 `profiling/tensor_core/doc_raw/tc_02_wmma_smem.txt`（与 cuda_core 的 doc_raw 对称，可由 `profiling/tensor_core/collect_doc_ncu.sh` 复跑）。

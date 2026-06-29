@@ -74,9 +74,6 @@ void launch_wmma_pipe(int M,int N,int K,
     wmma_pipe_kernel<<<grid,block>>>(M,N,K,A,B,C);
 }
 
-int main(int argc,char**argv){
-    int M=4096,N=4096,K=4096;
-    if(argc==4){ M=atoi(argv[1]); N=atoi(argv[2]); K=atoi(argv[3]); }
-    tc_run("tc_03 WMMA_pipe", launch_wmma_pipe, M,N,K);
-    return 0;
-}
+// 派发入口：由 tensor_core/{verify,bench} 按 id 调用（不再各自带 main）。
+void tc03_verify(int M,int N,int K){ tc_verify("tc_03 WMMA_pipe", launch_wmma_pipe, M,N,K); }
+void tc03_bench (int M,int N,int K){ tc_bench ("tc_03 WMMA_pipe", launch_wmma_pipe, M,N,K); }
