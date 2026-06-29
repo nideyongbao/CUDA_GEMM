@@ -9,6 +9,8 @@ verify_bf16
 #*.ncu-rep
 #*.nsys-rep
 profiling/**/*.run.log
+# A800 ncu 二进制本地生成；文本 details/SUMMARY 已入库
+profiling/a800/*.ncu-rep
 
 # 编辑器/系统
 .vscode/

@@ -9,8 +9,11 @@
 void tc01_verify(int M,int N,int K); void tc01_bench(int M,int N,int K);
 void tc02_verify(int M,int N,int K); void tc02_bench(int M,int N,int K);
 void tc03_verify(int M,int N,int K); void tc03_bench(int M,int N,int K);
+#ifndef NO_HOPPER
+// tc_04(WGMMA+TMA) / tc_05(FP8) 用 Hopper sm_90 独占指令；A800/Ampere 编译时 -DNO_HOPPER 跳过。
 void tc04_verify(int M,int N,int K); void tc04_bench(int M,int N,int K);
 void tc05_verify(int M,int N,int K); void tc05_bench(int M,int N,int K);
+#endif
 
 struct TCCase { const char* name; void(*verify)(int,int,int); void(*bench)(int,int,int); };
 
@@ -18,7 +21,9 @@ static const TCCase TC_CASES[] = {
     { "tc_01 WMMA_naive",   tc01_verify, tc01_bench },
     { "tc_02 WMMA_smem",    tc02_verify, tc02_bench },
     { "tc_03 WMMA_pipe",    tc03_verify, tc03_bench },
+#ifndef NO_HOPPER
     { "tc_04 WGMMA_TMA_WS", tc04_verify, tc04_bench },
     { "tc_05 WGMMA_fp8",    tc05_verify, tc05_bench },
+#endif
 };
 static const int TC_NCASES = (int)(sizeof(TC_CASES)/sizeof(TC_CASES[0]));

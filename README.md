@@ -93,6 +93,17 @@ make tc     # Tensor Core：统一 bench/verify 驱动（链接 5 个用例对�
 make clean  # 清理 .o 与可执行文件
 ```
 
+### 在 A800 / A100（Ampere, sm_80）上构建
+
+`ARCH` 与 `TC_HOPPER` 可命令行覆盖。Ampere 无 WGMMA/TMA/FP8，需用 `TC_HOPPER=0` 把 Hopper 独占用例（tc_04/tc_05）从派发表剔除，只编 WMMA 三级：
+
+```bash
+make ARCH=-arch=sm_80                  # CUDA core FP32+BF16（源码零改动）
+make tc ARCH=-arch=sm_80 TC_HOPPER=0   # Tensor Core 只编 tc_01-03（WMMA）
+```
+
+A800 全量复现结果、与 H20/cuBLAS/理论峰值/公开基准的对账见 **[docs/A800 GEMM 复现总结](docs/A800%20GEMM%20复现总结.md)**（profiling 数据在 `profiling/a800/`）。一句话：A800 BF16 张量核峰值 312T（H20 的 2.1×），cuBLAS BF16 实测 214–294T；但手写阶梯在 Ampere 上止步 WMMA（tc_03 43T，13.8% 峰），因 WGMMA/TMA/FP8 是 Hopper 独占。
+
 `make tc` 把 5 个用例编成 kernel-only 对象，链接成两个统一驱动（`tc_04/tc_05` 用 TMA，额外链 `-lcuda`）。产物按引擎分目录，不再污染仓库根目录。
 
 ---
@@ -201,7 +212,7 @@ Tensor Core 系列（每个用例一篇，含 ncu 分析）：
 12. [WGMMA + TMA + warp specialization](docs/11%20tensor%20core%20-%20WGMMA%20TMA%20warp%20specialization.md)
 13. [FP8 WGMMA](docs/12%20tensor%20core%20-%20FP8%20WGMMA.md)
 
-**最终总结**（重点收敛）：[docs/13 H20 GEMM 复现总结.md](docs/13%20H20%20GEMM%20复现总结.md)。早期逐步复现详录见 [docs/H20复现结论.md](docs/H20复现结论.md)；`docs/6.1.md`–`6.5.md` 是阶段性交接文档（实验结论、性能对账、踩坑、下一步），想快速了解项目演进可从最新的 [6.5](docs/6.5.md) 看起。
+**最终总结**（重点收敛）：[docs/13 H20 GEMM 复现总结.md](docs/13%20H20%20GEMM%20复现总结.md)；**A800 迁移复现**：[docs/A800 GEMM 复现总结.md](docs/A800%20GEMM%20复现总结.md)。早期逐步复现详录见 [docs/H20复现结论.md](docs/H20复现结论.md)；`docs/6.1.md`–`6.5.md` 是阶段性交接文档（实验结论、性能对账、踩坑、下一步），想快速了解项目演进可从最新的 [6.5](docs/6.5.md) 看起。
 
 ---
 

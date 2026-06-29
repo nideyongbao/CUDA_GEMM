@@ -1,11 +1,19 @@
 NVCC := nvcc
 
-# 目标硬件：NVIDIA H20 (Hopper, compute capability 9.0)。
+# 目标硬件（可在命令行覆盖）：
+#   H20  (Hopper, CC 9.0)  默认: make            / make tc
+#   A800 (Ampere,CC 8.0)        : make ARCH=-arch=sm_80
+#                                 make tc ARCH=-arch=sm_80 TC_HOPPER=0
 # sm_90a 是 Hopper 架构专用目标（WGMMA/TMA 等 Hopper 指令需要它）。
-# 换其他卡：Ada -> sm_89，A100 -> sm_80，Turing -> sm_75。
-ARCH := -arch=sm_90a
+# 换其他卡：Ada -> sm_89，A100/A800 -> sm_80，Turing -> sm_75。
+ARCH ?= -arch=sm_90a
 INCLUDES := -I include
 OPT := -O3
+
+# TC_HOPPER=1（默认，H20）编译全部 5 个 tensor_core 用例（含 WGMMA/TMA/FP8，需 driver API）。
+# TC_HOPPER=0（A800/Ampere）只编译 tc_01-03（WMMA / cp.async），并用 -DNO_HOPPER 让派发表
+# 跳过 tc_04(WGMMA+TMA) / tc_05(FP8) —— 这两者是 Hopper sm_90 独占指令，Ampere 无法运行。
+TC_HOPPER ?= 1
 
 NVCCFLAGS := $(ARCH) $(INCLUDES) $(OPT)
 LDFLAGS := -lcublas
@@ -23,9 +31,19 @@ FP32_KERNEL_OBJS := $(patsubst %.cu,%.o,$(filter-out $(CC_DIR)/bf16_cudacore.cu 
 BF16_KERNEL_OBJS := $(CC_DIR)/bf16_cudacore.o
 
 # ============ Tensor core（kernel + 驱动 + 可执行 全在 kernels/tensor_core/）============
-# 5 个用例编成 kernel-only 对象，由统一的 bench/verify 驱动按 id(1-5) 派发（与 cuda_core 对称）。
+# 用例编成 kernel-only 对象，由统一的 bench/verify 驱动按 id 派发（与 cuda_core 对称）。
 TC_DIR := kernels/tensor_core
-TC_CASE_OBJS := $(addprefix $(TC_DIR)/,tc_01_wmma_naive.o tc_02_wmma_smem.o tc_03_wmma_pipe.o tc_04_wgmma_tma_ws.o tc_05_wgmma_fp8.o)
+ifeq ($(TC_HOPPER),1)
+  # H20：全部 5 个用例（tc_04/05 用 TMA → driver API）
+  TC_CASE_OBJS := $(addprefix $(TC_DIR)/,tc_01_wmma_naive.o tc_02_wmma_smem.o tc_03_wmma_pipe.o tc_04_wgmma_tma_ws.o tc_05_wgmma_fp8.o)
+  TC_LDFLAGS := $(LDFLAGS_TMA)
+  TC_DEFS :=
+else
+  # A800/Ampere：只编 WMMA 三级（tc_01-03）；tc_04/05 是 Hopper 独占，-DNO_HOPPER 让派发表跳过
+  TC_CASE_OBJS := $(addprefix $(TC_DIR)/,tc_01_wmma_naive.o tc_02_wmma_smem.o tc_03_wmma_pipe.o)
+  TC_LDFLAGS := $(LDFLAGS)
+  TC_DEFS := -DNO_HOPPER
+endif
 
 .PHONY: all clean run run-verify bf16 tc cudacore
 
@@ -46,16 +64,16 @@ $(CC_DIR)/bench_bf16: $(CC_DIR)/bench_bf16.o $(BF16_KERNEL_OBJS)
 $(CC_DIR)/verify_bf16: $(CC_DIR)/verify_bf16.o $(BF16_KERNEL_OBJS)
 	$(NVCC) $^ -o $@ $(NVCCFLAGS) $(LDFLAGS)
 
-# ---- Tensor core 统一 bench/verify（链接 5 个用例对象 + 驱动）----
+# ---- Tensor core 统一 bench/verify（链接用例对象 + 驱动）----
 tc: $(TC_DIR)/bench $(TC_DIR)/verify
 $(TC_DIR)/bench: $(TC_DIR)/bench.o $(TC_CASE_OBJS)
-	$(NVCC) $^ -o $@ $(NVCCFLAGS) $(LDFLAGS_TMA)
+	$(NVCC) $^ -o $@ $(NVCCFLAGS) $(TC_LDFLAGS)
 $(TC_DIR)/verify: $(TC_DIR)/verify.o $(TC_CASE_OBJS)
-	$(NVCC) $^ -o $@ $(NVCCFLAGS) $(LDFLAGS_TMA)
+	$(NVCC) $^ -o $@ $(NVCCFLAGS) $(TC_LDFLAGS)
 
-# tensor_core 对象：依赖派发声明头 + 用例公共脚手架
+# tensor_core 对象：依赖派发声明头 + 用例公共脚手架（$(TC_DEFS) 让 A800 跳过 Hopper 用例）
 $(TC_DIR)/%.o: $(TC_DIR)/%.cu $(TC_DIR)/tc_cases.h include/tc_common.cuh
-	$(NVCC) -c $< -o $@ $(NVCCFLAGS)
+	$(NVCC) -c $< -o $@ $(NVCCFLAGS) $(TC_DEFS)
 
 # 通用 .o 规则（kernels/cuda_core/ 的 kernel 与驱动都走这条）
 %.o: %.cu $(COMMON_DEPS)

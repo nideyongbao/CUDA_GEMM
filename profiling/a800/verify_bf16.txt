@@ -1,0 +1,15 @@
+=== BF16 VERIFY @ 2048^3 (vs cuBLAS BF16) ===
+id=0  cublas_bf16        -> PASS
+id=1  naive              -> PASS
+id=2  smem               -> PASS
+id=3  blocktiling        -> PASS
+id=4  2Dblocktiling      -> PASS
+id=5  vectorized         -> PASS
+id=6  at_64x64x8_8x4     -> PASS
+id=7  at_64x64x16_8x4    -> PASS
+id=8  at_64x64x8_8x8     -> PASS
+id=9  warptile           -> PASS
+id=10 warptile_vec       -> PASS
+id=11 bank_conflict      -> PASS
+id=12 double_buffer      -> PASS
+
