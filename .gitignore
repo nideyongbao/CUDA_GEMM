@@ -6,8 +6,8 @@ bench_bf16
 verify_bf16
 
 # Nsight 报告（大二进制；文本 details/SUMMARY 保留入库）
-*.ncu-rep
-*.nsys-rep
+#*.ncu-rep
+#*.nsys-rep
 profiling/**/*.run.log
 
 # 编辑器/系统
