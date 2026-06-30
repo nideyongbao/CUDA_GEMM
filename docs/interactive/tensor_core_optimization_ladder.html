@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<!-- Asynchronous Cathedral · Tensor Core GEMM 优化阶梯 (interactive)
+     Built from algorithmic-art skill's viewer.html template (sibling of cuda_core_optimization_ladder.html):
+       KEPT  : Anthropic branding (colors/fonts/gradient), sidebar structure, seed controls, action buttons, self-contained single artifact.
+       VARIED: the p5.js algorithm (7 animated Tensor-Core scenes), parameters, UI controls — per the Asynchronous Cathedral philosophy.
+     All numbers are real NVIDIA H20 (Hopper, CC 9.0) measurements from this repo's docs/08-13 and profiling/tensor_core/. -->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tensor Core GEMM 优化阶梯 · Asynchronous Cathedral</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Lora:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --anthropic-dark:#141413; --anthropic-light:#faf9f5; --anthropic-mid-gray:#b0aea5;
+  --anthropic-light-gray:#e8e6dc; --anthropic-orange:#d97757; --anthropic-blue:#6a9bcc; --anthropic-green:#788c5d;
+  --tensor:#8b6db5; --red:#c0392b; --card:#ffffff;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Poppins','PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;
+  background:linear-gradient(135deg,var(--anthropic-light) 0%,#f5f3ee 100%);min-height:100vh;color:var(--anthropic-dark);}
+.container{display:flex;min-height:100vh;padding:18px;gap:18px;}
+.sidebar{width:330px;flex-shrink:0;background:rgba(255,255,255,0.96);backdrop-filter:blur(10px);
+  padding:22px;border-radius:14px;box-shadow:0 10px 30px rgba(20,20,19,.10);overflow-y:auto;overflow-x:hidden;max-height:calc(100vh - 36px);position:sticky;top:18px;}
+.sidebar h1{font-family:'Lora',serif;font-size:22px;font-weight:500;line-height:1.25;margin-bottom:6px;}
+.sidebar .subtitle{color:var(--anthropic-mid-gray);font-size:12.5px;margin-bottom:22px;line-height:1.5;}
+.control-section{margin-bottom:24px;}
+.control-section h3{font-size:13px;font-weight:600;letter-spacing:.02em;margin-bottom:12px;display:flex;align-items:center;gap:7px;text-transform:uppercase;color:#3a3a36;}
+.control-section h3::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--tensor);}
+.rung{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:transparent;border:1px solid transparent;
+  border-radius:9px;padding:7px 9px;margin-bottom:4px;cursor:pointer;transition:all .15s ease;}
+.rung:hover{background:var(--anthropic-light);}
+.rung.active{background:#fff;border-color:var(--tensor);box-shadow:0 2px 8px rgba(139,109,181,.20);}
+.rung .num{font-family:'Courier New',monospace;font-size:11px;color:var(--anthropic-mid-gray);width:16px;flex-shrink:0;text-align:right;}
+.rung .body{flex:1;min-width:0;}
+.rung .nm{font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rung .barwrap{height:5px;background:var(--anthropic-light-gray);border-radius:3px;margin-top:4px;overflow:hidden;}
+.rung .bar{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--tensor),#a98fcf);}
+.rung .gf{font-family:'Courier New',monospace;font-size:10.5px;color:var(--anthropic-mid-gray);flex-shrink:0;}
+.rung.concept .nm{color:var(--anthropic-blue);font-style:italic;}
+.button{background:var(--tensor);color:#fff;border:none;padding:9px 14px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;transition:all .18s ease;width:100%;font-family:inherit;}
+.button:hover{background:#7a5da4;transform:translateY(-1px);}
+.button:active{transform:translateY(0);}
+.button.secondary{background:var(--anthropic-blue);} .button.secondary:hover{background:#5a8bb8;}
+.button.tertiary{background:var(--anthropic-green);} .button.tertiary:hover{background:#6b7b52;}
+.button.ghost{background:var(--anthropic-light);color:#3a3a36;border:1px solid var(--anthropic-light-gray);}
+.button.ghost:hover{background:#fff;}
+.button-row{display:flex;gap:7px;} .button-row .button{flex:1;}
+.seed-controls{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:7px;}
+.seed-input{width:100%;background:var(--anthropic-light);padding:9px;border-radius:7px;font-family:'Courier New',monospace;font-size:13px;margin-bottom:9px;border:1px solid var(--anthropic-light-gray);text-align:center;}
+.seed-input:focus{outline:none;border-color:var(--tensor);background:#fff;}
+.control-group{margin-bottom:14px;}
+.control-group label{display:block;font-size:12.5px;font-weight:500;margin-bottom:6px;}
+.slider-container{display:flex;align-items:center;gap:10px;}
+.slider-container input[type=range]{flex:1;height:4px;background:var(--anthropic-light-gray);border-radius:2px;outline:none;-webkit-appearance:none;}
+.slider-container input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;background:var(--tensor);border-radius:50%;cursor:pointer;}
+.value-display{font-family:'Courier New',monospace;font-size:11.5px;color:var(--anthropic-mid-gray);min-width:42px;text-align:right;}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--anthropic-light);border:1px solid var(--anthropic-light-gray);border-radius:8px;padding:9px 11px;}
+.toggle-row .tl{font-size:12px;line-height:1.35;}
+.switch{position:relative;width:40px;height:22px;flex-shrink:0;cursor:pointer;}
+.switch input{opacity:0;width:0;height:0;}
+.slider-ui{position:absolute;inset:0;background:var(--anthropic-mid-gray);border-radius:22px;transition:.2s;}
+.slider-ui:before{content:'';position:absolute;height:16px;width:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;}
+.switch input:checked + .slider-ui{background:var(--tensor);}
+.switch input:checked + .slider-ui:before{transform:translateX(18px);}
+.legend{font-size:11.5px;line-height:1.7;color:#54534d;}
+.legend .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle;}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;gap:16px;}
+.canvas-area{background:var(--card);border-radius:14px;box-shadow:0 18px 40px rgba(20,20,19,.10);overflow:hidden;}
+#canvas-container canvas{display:block;width:100%!important;height:auto!important;}
+.loading{padding:60px;text-align:center;color:var(--anthropic-mid-gray);}
+.explain{background:var(--card);border-radius:14px;box-shadow:0 18px 40px rgba(20,20,19,.10);padding:26px 30px 32px;}
+.explain .etitle{font-family:'Lora',serif;font-size:25px;font-weight:500;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
+.explain .etitle .en{font-family:'Courier New',monospace;font-size:13px;color:var(--anthropic-mid-gray);}
+.explain .elede{font-size:15px;line-height:1.6;color:#3a3a36;margin:10px 0 4px;}
+.metrics-strip{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 6px;}
+.mstat{flex:1;min-width:128px;background:var(--anthropic-light);border-radius:10px;padding:12px 14px;border-left:4px solid var(--tensor);}
+.mstat .k{font-size:11px;color:var(--anthropic-mid-gray);text-transform:uppercase;letter-spacing:.03em;}
+.mstat .v{font-family:'Courier New',monospace;font-size:21px;font-weight:600;margin-top:2px;}
+.mstat .sub{font-size:11px;color:#7a796f;margin-top:1px;}
+.mstat.blue{border-left-color:var(--anthropic-blue);} .mstat.green{border-left-color:var(--anthropic-green);} .mstat.gray{border-left-color:var(--anthropic-mid-gray);} .mstat.orange{border-left-color:var(--anthropic-orange);}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px;}
+@media(max-width:880px){.grid2{grid-template-columns:1fr;}}
+.card{border-radius:11px;padding:15px 17px;border:1px solid var(--anthropic-light-gray);background:#fff;}
+.card h4{font-size:13.5px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:7px;}
+.card p{font-size:13.5px;line-height:1.62;color:#3a3a36;}
+.card.goal{background:#fbf3ef;border-color:#f0d8cd;} .card.goal h4{color:var(--anthropic-orange);}
+.card.change{background:#f1ecf6;border-color:#ddd0ec;} .card.change h4{color:#6f54a0;}
+.card.reason{background:#f1f4ec;border-color:#dbe4cd;} .card.reason h4{color:#5f7344;}
+.card.effect{background:#f7f6f1;border-color:var(--anthropic-light-gray);} .card.effect h4{color:#3a3a36;}
+.bn{display:inline-flex;align-items:center;gap:7px;font-family:'Courier New',monospace;font-size:12px;background:#fff;border:1px solid var(--anthropic-light-gray);border-radius:20px;padding:3px 11px;margin:3px 4px 3px 0;}
+.bn .arr{color:var(--tensor);font-weight:700;}
+.bn .was{color:var(--red);} .bn .now{color:var(--anthropic-green);font-weight:600;}
+.section-h{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:#3a3a36;margin:24px 0 11px;display:flex;align-items:center;gap:8px;}
+.section-h::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--tensor);}
+.terms{display:flex;flex-direction:column;gap:8px;}
+.term{font-size:13px;line-height:1.55;}
+.term b{display:inline-block;background:var(--anthropic-dark);color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:500;margin-right:8px;}
+.term .en{color:var(--anthropic-mid-gray);font-family:'Courier New',monospace;font-size:11px;}
+pre.algo{background:#1d1c1a;color:#e8e6dc;border-radius:10px;padding:15px 17px;font-family:'Courier New',monospace;font-size:12.5px;line-height:1.7;overflow-x:auto;white-space:pre;}
+pre.algo .cm{color:#9a9488;} pre.algo .hl{color:#b79be0;} pre.algo .kw{color:#7fb0e0;} pre.algo .gn{color:#a9c08a;} pre.algo .og{color:#e0a07f;}
+.flowline{font-size:13px;line-height:1.6;background:var(--anthropic-light);border-radius:9px;padding:12px 15px;margin-top:12px;}
+.flowline code{font-family:'Courier New',monospace;background:#fff;border:1px solid var(--anthropic-light-gray);border-radius:5px;padding:1px 6px;font-size:12px;}
+.callout{margin-top:16px;border-radius:10px;padding:14px 17px;font-size:13.5px;line-height:1.62;background:#f3eefa;border:1px solid #ddd0ec;}
+.callout b{color:#6f54a0;}
+.navfoot{display:flex;justify-content:space-between;gap:10px;margin-top:26px;}
+.navfoot .button{max-width:200px;}
+@media(max-width:760px){.container{flex-direction:column;}.sidebar{width:100%;position:static;max-height:none;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="sidebar">
+    <h1>Tensor Core GEMM 优化阶梯</h1>
+    <div class="subtitle">换上张量核引擎，从 11% 一路冲到 80%+ 利用率。<br>每一幕都问同一个问题：<b>此刻，张量核有料可吃吗？</b><br><span style="color:#9a86b5">所有数字均为 NVIDIA H20 真机实测</span></div>
+
+    <div class="control-section">
+      <h3>优化阶梯（点击切换）</h3>
+      <div id="ladder"></div>
+      <div style="font-size:11px;color:var(--anthropic-mid-gray);margin-top:6px;text-align:center">柱长 ∝ 绝对吞吐（满刻度 = FP8 峰值 296T）</div>
+    </div>
+
+    <div class="control-section">
+      <h3>动画</h3>
+      <div class="button-row" style="margin-bottom:9px;">
+        <button class="button" id="playBtn" onclick="togglePlay()">⏸ 暂停</button>
+        <button class="button ghost" onclick="stepFrame()">单步 ⏭</button>
+      </div>
+      <div class="control-group">
+        <label>播放速度</label>
+        <div class="slider-container">
+          <input type="range" id="speed" min="0.2" max="2.2" step="0.1" value="1.0" oninput="updateParam('speed',this.value)">
+          <span class="value-display" id="speed-value">1.0×</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="control-section" id="ctxSection">
+      <h3>本阶段开关</h3>
+      <label class="toggle-row">
+        <span class="tl" id="ctxLabel">—</span>
+        <span class="switch"><input type="checkbox" id="ctx" checked onchange="toggleCtx(this.checked)"><span class="slider-ui"></span></span>
+      </label>
+    </div>
+
+    <div class="control-section">
+      <h3>随机种子（粒子抖动）</h3>
+      <input type="number" id="seed-input" class="seed-input" value="12345" onchange="updateSeed()">
+      <div class="seed-controls">
+        <button class="button secondary" onclick="previousSeed()">← 上一个</button>
+        <button class="button secondary" onclick="nextSeed()">下一个 →</button>
+      </div>
+      <button class="button tertiary" onclick="randomSeedAndUpdate()">↻ 随机</button>
+    </div>
+
+    <div class="control-section">
+      <h3>图例</h3>
+      <div class="legend">
+        <span class="dot" style="background:#8b6db5"></span>张量核 Tensor Core（一条指令吃 16×16×16）<br>
+        <span class="dot" style="background:#788c5d"></span>寄存器 / fragment（WMMA 中转）<br>
+        <span class="dot" style="background:#6a9bcc"></span>共享内存 Shared<br>
+        <span class="dot" style="background:#d97757"></span>全局内存 DRAM（最远最慢）<br>
+        <span class="dot" style="background:#c0392b"></span>等待 / 瓶颈 / 张量核空转
+      </div>
+    </div>
+
+    <div class="control-section">
+      <h3>操作</h3>
+      <div class="button-row">
+        <button class="button ghost" onclick="resetAll()">重置</button>
+        <button class="button ghost" onclick="downloadPNG()">下载 PNG</button>
+      </div>
+      <div style="margin-top:9px"><a href="cuda_core_optimization_ladder.html" style="font-size:12px;color:var(--anthropic-blue);text-decoration:none">← 上一篇：CUDA Core 优化阶梯</a></div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="canvas-area"><div id="canvas-container"><div class="loading">正在初始化可视化…</div></div></div>
+    <div class="explain" id="explain"></div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════
+//  STAGE DATA — all metrics are real H20 measurements
+//  (sources: repo docs/08–13, profiling/throughput_4096.txt, profiling/tensor_core/SUMMARY.md)
+//  GFLOPS = headline @4096³; ncu metrics (cyc/issue, SM Busy, occ, L1/TEX) = @2048³ (--set full)
+// ════════════════════════════════════════════════════════════════════════
+const BF16_PEAK=148000, FP8_PEAK=296000, FP32_PEAK=44000;   // TFLOPS×1000
+const CUBLAS_BF16=131785;                                    // cuBLAS BF16 @4096³ (fair, handle reused)
+
+const STAGES=[
+{
+  key:'intro', type:'concept', viz:'intro',
+  title:'换引擎：什么是张量核', en:'why tensor core',
+  lede:'CUDA core 一条指令只算一次乘加；<b>张量核 (Tensor Core)</b> 一条指令直接吃下一整块 16×16×16 的矩阵乘——快了一个数量级。手写 CUDA core 的 FP32 顶到 ~25 TFLOPS（峰值 57%）就到头了；要再快 5–10×，必须换引擎。但有个贯穿全程的陷阱：<b>「有张量核」≠「喂得饱」</b>。',
+  terms:[
+    ['张量核','Tensor Core','GPU 里专做矩阵乘的硬件单元。一条 MMA 指令吞一个小矩阵块，吞吐远高于普通 CUDA core。'],
+    ['BF16 / FP8','bfloat16 / fp8 e4m3','更短的数据类型。位数越少 → 搬运越省、张量核吞吐越高。H20 上 BF16 峰值 148 TFLOPS、FP8 296 TFLOPS。'],
+    ['三档算力','peak','同一张 H20：FP32(CUDA core) ~44T，BF16(张量核) 148T，FP8(张量核) 296T。换引擎=跨档。'],
+    ['SM Busy','tensor pipe utilization','张量核这条管线到底有多忙。它才是张量核 kernel 的真正体温计——不是占用率。'],
+  ],
+  goal:'看懂：为什么要换引擎，以及「喂饱张量核」才是真问题。', change:'—', reason:'—', effect:'—',
+  algo:[
+    [['cm','// CUDA core：一条指令 = 1 次乘加']],
+    [['','c += a * b']],
+    [['cm','// 张量核：一条指令 = 一整块 16×16×16 矩阵乘']],
+    [['hl','mma(D, A_16x16, B_16x16, C)   '],['cm','// 256 个乘加 / 指令']],
+  ],
+  flow:'整条阶梯只优化一件事：<b>让那台快到离谱的张量核永不挨饿</b>。先把数据搬近、再让搬运彻底异步、最后让操作数直接喂进引擎。',
+  ctx:null,
+},
+{
+  key:'tc01', type:'kernel', viz:'wmma_naive', file:'tc_01_wmma_naive.cu', launch:'block(128,4)，每 warp 算一个 16×16 tile',
+  title:'WMMA 朴素版：张量核的 Hello World', en:'tc_01 WMMA_naive',
+  gflops:16688, util:11.3, peak:'148T BF16', occ:'71.2%', cyc:'109.2', smbusy:'17.5%', l1tex:'99.8%',
+  lede:'WMMA 让一个 warp(32 线程)协作，把数据装进 fragment，由张量核一条 mma_sync 吃掉 16×16×16。朴素之处：fragment 直接从全局内存取，零复用——结果张量核被活活饿死。',
+  terms:[
+    ['WMMA','warp-level MMA','张量核最入门的接口：一个 warp 协作算一个 16×16 tile。'],
+    ['fragment','wmma::fragment','把 16×16 小块数据装进 warp 的寄存器，作为张量核的操作数。'],
+    ['mma_sync','matrix multiply-accumulate','一条张量核指令：吃 a_frag×b_frag 累加进 acc，一次 16×16×16。'],
+    ['load_matrix_sync','—','把一个 16×16 块从内存搬进 fragment。朴素版直接从 global 搬。'],
+  ],
+  goal:'第一次用上张量核，并看清「光会用还不够」。',
+  change:'每个 warp 负责一个 16×16 的 C。内循环每步都 load_matrix_sync 直接从 global 取 A、B 两个 fragment，再 mma_sync。算 1 次只搬 1 次，毫无复用。',
+  reason:'和 CUDA core 的 naive 同病：算术强度太低，访存喂不上。L1/TEX 被搬 fragment 的访存指令打满到 99.8%，warp cyc/issue 高达 109，long_scoreboard(等 global)+mio_throttle(指令排队) 占 74%。张量核大部分时间在干等。',
+  effect:'张量核利用率(SM Busy)只有 17.5%，11.3% 峰值——甚至低于最好的 CUDA core kernel。证明：用张量核是必要的，但远不充分。',
+  bn:[['SM Busy','—','17.5% (饿死)'],['L1/TEX','—','99.8% 打满'],['cyc/issue','—','109']],
+  algo:[
+    [['cm','// 一个 warp 算一个 16×16 的 C tile']],
+    [['','fill(acc, 0)']],
+    [['kw','for '],['','k in 0..K step 16:']],
+    [['hl','    load_matrix_sync(a_frag, A+..)   '],['cm','// 直接从 global 取!']],
+    [['hl','    load_matrix_sync(b_frag, B+..)   '],['cm','// 直接从 global 取!']],
+    [['og','    mma_sync(acc, a_frag, b_frag, acc)   '],['cm','// 张量核 16×16×16']],
+    [['','store_matrix_sync(C+.., acc)']],
+  ],
+  flow:'数据流：<code>global A,B</code> → 寄存器 fragment → <b>Tensor Core</b> → <code>global C</code>。无复用，引擎饿死。',
+  ctx:{label:'高亮张量核空转（被饿死）', def:true},
+},
+{
+  key:'tc02', type:'kernel', viz:'wmma_smem', file:'tc_02_wmma_smem.cu', launch:'block(128)=4 warp，block tile 64×64',
+  title:'WMMA + 共享内存：先搬进来复用', en:'tc_02 WMMA_smem',
+  gflops:29692, util:20.1, peak:'148T BF16', occ:'42.0%', cyc:'16.4', smbusy:'40.9%', l1tex:'82.8%',
+  lede:'和 CUDA core 的 naive→smem 同一个思想：先把 A/B tile 搬进共享内存，让 4 个 warp 反复复用，把 global 的重复读取换成 smem 内部复用，喂饱张量核。',
+  terms:[
+    ['共享内存复用','shared staging','一个 block 协作把 tile 搬进 shared 一次，多个 warp 反复从 shared 取 fragment。'],
+    ['占用率的代价','occupancy trade-off','寄存器涨(40→64)、smem 吃资源，占用率 71%→42%；但因 cyc/issue 暴降，整体更快——占用率不是越高越好。'],
+    ['ALU 管线','—','现在最忙的是 load_matrix(smem→寄存器)+地址计算这类 ALU/MIO 指令，张量核仍没完全喂饱。'],
+  ],
+  goal:'消灭朴素版的「从 global 反复取 fragment」，把热数据搬到近处复用。',
+  change:'block tile 64×64、4 warp 排 2×2，每 warp 负责 2×2 个 fragment。每个 K 步先 128 线程协作把 A/B 搬进 smem，__syncthreads 后从 smem 取 fragment 做 4 次 mma_sync。',
+  reason:'smem 复用一下把「等访存」打下来：warp cyc/issue 109→16.4。但仍是「搬一块→sync→算一块」的同步节奏，load_matrix(smem→reg)+__syncthreads 让张量核有空档，ALU 成了新天花板。',
+  effect:'Compute 16.5%→37.8%，4096³ 16685→29733 GFLOPS（11.3%→20.1%），一举超过最好的 CUDA core kernel。这是张量核阶梯最划算的一步。',
+  bn:[['cyc/issue','109','16.4'],['SM Busy','17.5%','40.9%'],['GFLOPS','16688','29692']],
+  algo:[
+    [['cm','// block tile 64×64，4 warp，每 warp 2×2 个 fragment']],
+    [['kw','for '],['','k0 in 0..K step 16:']],
+    [['gn','    协作把 A/B tile 搬进 shared   '],['cm','// 搬一次']],
+    [['kw','    __syncthreads()']],
+    [['hl','    load_matrix_sync(a_frag, As)   '],['cm','// 改从 shared 取']],
+    [['hl','    load_matrix_sync(b_frag, Bs)']],
+    [['og','    mma_sync(acc, ...)   '],['cm','// 4 次']],
+    [['kw','    __syncthreads()']],
+  ],
+  flow:'数据流：<code>global</code> →(搬一次)→ <code>shared</code> → 寄存器 fragment → <b>Tensor Core</b>。复用在 shared 侧。',
+  ctx:{label:'显示 load_matrix / sync 造成的空档', def:true},
+},
+{
+  key:'tc03', type:'kernel', viz:'wmma_pipe', file:'tc_03_wmma_pipe.cu', launch:'block(256)=8 warp，3 级 ring buffer',
+  title:'cp.async 流水线：搬运与计算重叠', en:'tc_03 WMMA_pipe',
+  gflops:38057, util:25.7, peak:'148T BF16', occ:'33.4%', cyc:'27.7', smbusy:'39.9%', l1tex:'92.2%',
+  lede:'smem 版仍是「搬→sync→算→再搬」的同步节奏：搬的时候张量核闲、算的时候搬运单元闲。两件事用不同硬件，本可重叠。用 cp.async 异步预取下一块，让搬运和计算并行。',
+  terms:[
+    ['cp.async','asynchronous copy','异步拷贝指令：发起 global→smem 搬运后立刻返回，不阻塞线程，搬运在后台进行。'],
+    ['多级 ring buffer','multi-stage pipeline','开 3 块 smem 轮流用：一边算 stage n，一边把 stage n+1 异步搬进来。'],
+    ['TMA 的前身','—','cp.async ↔ TMA、commit/wait ↔ mbarrier。结构(ring buffer+预取+按级等待)和后面的 WGMMA 版一模一样。'],
+  ],
+  goal:'把「搬下一块」和「算当前块」重叠起来，填掉同步节奏的空档。',
+  change:'① 更大 block tile(128×64)提高复用；② smem 改 3 级 ring buffer；③ 用 cp.async(__pipeline_memcpy_async + commit + wait_prior)异步预取后续 K-tile。',
+  reason:'cp.async 把「等数据回来」异步化：long_scoreboard 掉到 1.21，瓶颈变成发这些拷贝指令本身的 MIO 排队(33.6%)。注意：2048³ 上收益被高占用率淹没，放大到 4096³ 才显出来。',
+  effect:'4096³ 把手写 WMMA 从 20.1% 推到 25.7%（38063 GFLOPS）。但它仍是 warp 级 + 靠占用率藏延迟，到 ~26% 基本见顶。',
+  bn:[['long_scoreboard','5.59','1.21 (异步化)'],['util@4096³','20.1%','25.7%'],['头号 stall','scoreboard','mio_throttle']],
+  algo:[
+    [['cm','// 3 级 ring buffer + cp.async 异步预取']],
+    [['gn','预取前 2 个 stage   '],['cm','// cp.async']],
+    [['kw','for '],['','kt in 0..K_TILES:']],
+    [['','    wait_prior        '],['cm','// 当前 stage 搬好了']],
+    [['og','    mma_sync 算当前 stage      '],['cm','// 张量核在算']],
+    [['gn','    cp.async 预取 kt+2 的 tile  '],['cm','// 搬运单元同时在搬(重叠!)']],
+    [['','    commit']],
+  ],
+  flow:'数据流：<code>global</code> ⇉(cp.async 异步)⇉ <code>shared (3级)</code> → fragment → <b>Tensor Core</b>。搬/算在不同硬件上重叠。',
+  ctx:{label:'显示 cp.async 重叠时间线', def:true},
+},
+{
+  key:'tc04', type:'kernel', viz:'wgmma', file:'tc_04_wgmma_tma_ws.cu', launch:'block(256)=2 warpgroup，BM128×BN128×BK64，3 级',
+  title:'WGMMA + TMA + warp specialization', en:'tc_04 · Hopper 原生',
+  gflops:119357, util:80.6, peak:'148T BF16', occ:'7.6%', cyc:'25.1', smbusy:'82.8%', l1tex:'20.7%',
+  lede:'换上 Hopper 原生指令，整条路被重新设计：warpgroup 级、操作数直接从共享内存吃、彻底异步、生产者/消费者分工。这是整条手写阶梯最大的一跳——×3.1。',
+  terms:[
+    ['WGMMA','warpgroup MMA (async)','warpgroup 级(4 warp=128 线程发一条)、异步、操作数<b>可直接从 shared 取</b>(经描述符)，不再过寄存器。'],
+    ['warpgroup','—','4 个 warp = 128 线程作为一个整体协同发射 WGMMA。'],
+    ['TMA','Tensor Memory Accelerator','一个线程发起一整块 global→smem 的批量异步拷贝，自带 swizzle，走专用路径(不占 L1/TEX)。'],
+    ['mbarrier','—','TMA→WGMMA 的完成信号 + stage 复用。生产者搬好 arrive，消费者算完 arrive。'],
+    ['warp specialization','生产者/消费者','1 个 warpgroup 专跑 TMA(生产者)、1 个专跑 WGMMA(消费者)，组成多级异步流水线。'],
+  ],
+  goal:'让张量核第一次成为最高利用的管线——用异步流水线代替高占用率。',
+  change:'2 个 warpgroup 分工：生产者循环跑 TMA 把 tile 异步搬进 3 级 smem ring buffer，用 mbarrier 通知；消费者循环用 WGMMA 直接从 smem 取操作数算，算完通知生产者腾位。',
+  reason:'TMA 走专用路径，L1/TEX 从 ~90% 掉到 20.7%；WGMMA 操作数直取 smem、绕过寄存器。于是张量核(Tensor FP 管线)成为最高利用管线，SM Busy 82.8%。最反直觉：占用率只有 7.6%(每 SM 才挂 1~2 个 block)却最快——靠深度异步流水线，不靠堆 warp。',
+  effect:'25.6%→80.6%，×3.1，最大一跳；8192³ 达 88.1%，约为 fair cuBLAS BF16 的 90%。头号 stall 变成生产者/消费者的 mbarrier 交接(barrier 53.6%)，且大多被重叠掉。',
+  bn:[['L1/TEX','92.2%','20.7% (TMA 专用路径)'],['SM Busy','39.9%','82.8%'],['占用率','33.4%','7.6%(却最快)']],
+  algo:[
+    [['cm','// 2 个 warpgroup：生产者跑 TMA，消费者跑 WGMMA']],
+    [['kw','if '],['','生产者 WG:']],
+    [['kw','    for '],['','kb in K tiles:']],
+    [['','        empty[q].wait()              '],['cm','// 等消费者腾出 stage']],
+    [['gn','        TMA: bulk copy → smem[q]    '],['cm','// 一个线程搬一整块']],
+    [['','        full[q].arrive(字节数)        '],['cm','// 通知消费者']],
+    [['kw','else '],['','消费者 WG:']],
+    [['kw','    for '],['','kb in K tiles:']],
+    [['','        full[q].wait()               '],['cm','// 等生产者搬好']],
+    [['og','        wgmma(d, smemA, smemB)       '],['cm','// 操作数直取 smem!']],
+    [['','        empty[q].arrive()            '],['cm','// 腾出 stage']],
+  ],
+  flow:'数据流：<code>global</code> ⇉(TMA)⇉ <code>shared</code> ⇉(WGMMA 直取)⇉ <b>Tensor Core</b>。<b>绕过寄存器</b>，生产者/消费者隔空击掌(mbarrier)、深度异步流水。',
+  ctx:{label:'显示生产者/消费者异步流水线', def:true},
+},
+{
+  key:'tc05', type:'kernel', viz:'fp8', file:'tc_05_wgmma_fp8.cu', launch:'block(256)，BK=128（每行 128 字节）',
+  title:'FP8 WGMMA：可插拔的两倍吞吐', en:'tc_05 WGMMA_fp8',
+  gflops:224225, util:75.8, peak:'296T FP8', occ:'7.4%', cyc:'25.2', smbusy:'73.1%', l1tex:'22.9%',
+  lede:'H20 的 FP8 峰值是 BF16 的两倍(296T)。在 tc_04 的流水线上换成 FP8，改动出奇地少——正好说明 Hopper 这套异步骨架对精度是「可插拔」的。',
+  terms:[
+    ['FP8 (e4m3)','8-bit float','1 字节的浮点。只有 3 位尾数，较粗糙，实际常配 per-block scaling 补偿精度。'],
+    ['可插拔精度','pluggable precision','骨架(TMA+WGMMA+warp specialization)不变，精度只是骨架上的一个参数。'],
+    ['字节布局不变','128B swizzle','换精度不换布局：smem 仍是 128 行×128 字节，描述符魔数直接沿用。'],
+  ],
+  goal:'把同一条流水线接上 FP8，拿下 ~2× 吞吐。',
+  change:'只改 3 处：① 元素类型 bf16(2B)→fp8_e4m3(1B)；② WGMMA 指令 m64n128k16→m64n128k32(FP8 的 K 维是 32)；③ BK 64→128(让 smem 每行仍 128 字节，对齐 swizzle)。',
+  reason:'结构与 tc_04 同构(L1/TEX 低、SM Busy 高、占用率 7.4%)，只是吃半字节的数据。因 smem 字节布局完全一致(128 行×128 字节，每条 wgmma 沿 K 跨 32 字节)，描述符魔数无需改。',
+  effect:'吞吐几乎翻倍：224245 GFLOPS = FP8 峰值(296T)的 75.8%(8192³ 84.8%)，= 1.88× BF16 WGMMA。用 CPU double 参考验证算得对(fp8 粗但正确)。',
+  bn:[['GFLOPS','119357','224225 (1.88×)'],['对 FP8 峰值','—','75.8% / 296T'],['改动','—','仅 3 处']],
+  algo:[
+    [['cm','// 复用 tc_04 整套流水线，只改 3 处：']],
+    [['hl','① 类型: bf16(2B) → fp8_e4m3(1B)']],
+    [['hl','② 指令: m64n128k16.bf16 → m64n128k32.e4m3']],
+    [['hl','③ BK: 64 → 128   '],['cm','// 每行仍 128 字节，对齐 swizzle']],
+    [['cm','// 描述符魔数不变(字节布局相同) → 吞吐翻倍']],
+  ],
+  flow:'数据流同 tc_04，但每个数据包<b>减半</b>(1 字节)。同样的搬运量搬进两倍的元素 → 张量核吞吐翻倍。',
+  ctx:{label:'对比 BF16(2 字节) vs FP8(1 字节) 包大小', def:true},
+},
+{
+  key:'summary', type:'concept', viz:'summary',
+  title:'回看：从「人多」到「流水」', en:'the whole climb',
+  lede:'5 步把张量核利用率从 11% 推到 80%+。分水岭清清楚楚：<b>warp 级 WMMA 靠高占用率(TLP)硬扛，张量核吃不饱(≤41%)；warpgroup 级 WGMMA 靠异步多级流水线，占用率仅 7.6% 却把张量核拉到 83% 忙</b>。这就是 Hopper 原生路线的本质。',
+  terms:[
+    ['两种藏延迟范式','TLP vs async pipeline','WMMA：很多 warp 轮流跑盖住延迟(占用率 71→33%)。WGMMA：少量 warp + TMA/WGMMA/mbarrier 深度异步流水(占用率 7.6%)。'],
+    ['全栈阶梯','full stack','FP32(CUDA core 57% 峰值) → BF16(WMMA 11→26% → WGMMA 80–88%) → FP8(75–85%)。'],
+    ['最后一公里','beyond','逼到 cuBLAS ~90% 后，再上要 persistent kernel + tile scheduler、cluster/DSMEM、自写 swizzle、CUTLASS/CuTe。'],
+  ],
+  goal:'把五步收敛成一条主线：藏延迟从「人多」转向「流水」。',
+  change:'—', reason:'—',
+  effect:'WMMA naive 16688 → smem 29692 → cp.async 38057 →（换引擎为 Hopper 原生）WGMMA 119357 → FP8 224225。',
+  bn:[['SM Busy','17.5%','82.8%'],['占用率','71.2%','7.6%'],['util','11.3%','80.6%(BF16)/75.8%(FP8)']],
+  algo:[
+    [['cm','// 一句话主线']],
+    [['','WMMA naive  → 从 global 取 fragment，张量核饿死']],
+    [['','+shared     → 复用，cyc/issue 109→16']],
+    [['','+cp.async   → 搬/算重叠(异步搬运首现)']],
+    [['hl','换 Hopper 原生 ↓ —— 范式从 TLP 转向异步流水线']],
+    [['','+WGMMA+TMA+WS → 操作数直取 smem，占用 7.6% 却 SM Busy 83%']],
+    [['','+FP8        → 精度可插拔，吞吐翻倍']],
+  ],
+  flow:'这套异步骨架(TMA+WGMMA+warp specialization)就是现代 Hopper GEMM 的范式：先把流水线搭对，精度(bf16/fp8/未来 fp4)只是可插拔参数。完整对照见仓库 <code>docs/13</code>。',
+  ctx:null,
+},
+];
+
+// ════════════════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════════════════
+let params={ seed:12345, speed:1.0 };
+const defaultParams={...params};
+let cur=0, playing=true, gt=0, ctxOn=true;
+const CW=1000, CH=620;
+const COL={ glob:[217,119,87], smem:[106,155,204], reg:[120,140,93], tensor:[139,109,181],
+            red:[192,57,43], ok:[120,140,93], dim:[176,174,165], ink:[58,58,54], paper:[251,250,247],
+            prod:[106,155,204], cons:[139,109,181] };
+
+const T={
+  tc:   {x:672,y:56,w:308,h:46, c:COL.tensor,nm:'Tensor Core 张量核', lat:'一条指令吃 16×16×16'},
+  reg:  {x:672,y:124,w:308,h:50,c:COL.reg,   nm:'寄存器 / fragment',   lat:'WMMA 操作数在此中转'},
+  smem: {x:672,y:226,w:308,h:84,c:COL.smem,  nm:'共享内存 Shared',     lat:'≈20 周期 · 片上'},
+  glob: {x:672,y:392,w:308,h:150,c:COL.glob, nm:'全局内存 DRAM',       lat:'≈400+ 周期 · 最远'},
+};
+const LANEX=712;
+
+// ════════════════════════════════════════════════════════════════════════
+//  p5 SETUP / DRAW
+// ════════════════════════════════════════════════════════════════════════
+function setup(){
+  const c=createCanvas(CW,CH); c.parent('canvas-container');
+  const l=document.querySelector('.loading'); if(l) l.remove();
+  randomSeed(params.seed); noiseSeed(params.seed);
+  textFont('"Poppins","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif');
+  buildLadder(); selectStage(0);
+}
+function inc(){ return 0.0065*params.speed; }
+function draw(){
+  if(playing) gt+=inc();
+  background(COL.paper);
+  const s=STAGES[cur];
+  drawHeader(s);
+  const fn=VIZ[s.viz]; if(fn) fn();
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  DRAW HELPERS
+// ════════════════════════════════════════════════════════════════════════
+function ease(t){ t=constrain(t,0,1); return t<0.5?2*t*t:1-pow(-2*t+2,2)/2; }
+function tri(t){ t=t-floor(t); return t<0.5?t*2:(1-t)*2; }
+function fc(c,a){ return color(c[0],c[1],c[2], a===undefined?255:a); }
+function rrect(x,y,w,h,r,fillC,strokeC,sw){
+  push();
+  if(fillC){noStroke();fill(fillC);} else noFill();
+  if(strokeC){stroke(strokeC);strokeWeight(sw||1.5);} else noStroke();
+  rect(x,y,w,h,r); pop();
+}
+function tlabel(txt,x,y,sz,c,al,style){
+  push(); fill(c||fc(COL.ink)); noStroke(); textSize(sz||13);
+  textAlign(al||LEFT,CENTER); if(style) textStyle(style); text(txt,x,y); pop();
+}
+function drawHeader(s){
+  push();
+  fill(fc(COL.ink)); noStroke(); textSize(20); textAlign(LEFT,TOP); textStyle(BOLD);
+  text(s.title,24,18);
+  textStyle(NORMAL); textSize(12); fill(fc(COL.dim));
+  text(s.en+(s.file?'   ·   '+s.file:''),24,46);
+  pop();
+}
+function cyt(t){ return t.y+(t.h>60?22:t.h/2); }
+function tierBox(t, active, extra){
+  const dim=active===false;
+  rrect(t.x,t.y,t.w,t.h,10, fc(t.c, dim?22:38), fc(t.c, dim?70:230), 2);
+  tlabel(t.nm, t.x+14, t.y+(t.h>60?20:t.h/2), 13.5, fc(t.c, dim?120:255), LEFT, BOLD);
+  if(t.h>60) tlabel(t.lat, t.x+14, t.y+t.h-16, 11, fc(COL.dim));
+  else tlabel(t.lat, t.x+t.w-12, t.y+t.h/2, 10.5, fc(COL.dim), RIGHT);
+  if(extra) extra();
+}
+// tensor core tier with a "busy" indicator + pulsing core
+function drawTC(busy){
+  const t=T.tc; const lit = busy>0.5;
+  const glow = lit? (140+tri(gt*2)*100) : 30;
+  rrect(t.x,t.y,t.w,t.h,10, fc(t.c, 30+busy*120), fc(t.c,230), 2);
+  tlabel(t.nm, t.x+14, t.y+t.h/2-6, 13.5, fc(t.c,255), LEFT, BOLD);
+  tlabel(t.lat, t.x+14, t.y+t.h/2+11, 10.5, fc(COL.dim), LEFT);
+  // busy bar
+  const bx=t.x+t.w-110, bw=96;
+  tlabel('SM Busy', bx, t.y+11, 9.5, fc(COL.dim), LEFT);
+  rrect(bx, t.y+17, bw, 8, 4, fc(COL.dim,60));
+  rrect(bx, t.y+17, bw*constrain(busy,0,1), 8, 4, fc(t.c, 230));
+  tlabel(Math.round(busy*100)+'%', bx+bw, t.y+34, 10, fc(t.c), RIGHT, BOLD);
+  // pulsing core dot
+  push(); noStroke(); fill(t.c[0],t.c[1],t.c[2], glow); circle(t.x+t.w/2-30, t.y+t.h/2, lit? 14+tri(gt*3)*6:10); pop();
+}
+function drawTiers(act, busy){
+  drawTC(busy===undefined?0.2:busy);
+  tierBox(T.reg, act&&act.reg);
+  tierBox(T.smem, act&&act.smem);
+  tierBox(T.glob, true);
+  tlabel('内存层级（越下越慢越远）', T.glob.x, 552, 11.5, fc(COL.dim), LEFT);
+}
+function vlane(){ push(); stroke(0,0,0,18); strokeWeight(2); line(LANEX,cyt(T.tc),LANEX,cyt(T.glob)); pop(); }
+function packet(x,y,r,c,glow){
+  push(); noStroke();
+  if(glow){ fill(c[0],c[1],c[2],55); circle(x,y,r*2.7); }
+  fill(c[0],c[1],c[2]); circle(x,y,r*2);
+  fill(255,255,255,160); circle(x-r*0.3,y-r*0.3,r*0.7);
+  pop();
+}
+function arrow(x1,y1,x2,y2,c,w){
+  push(); stroke(c); strokeWeight(w||2.5); fill(c);
+  line(x1,y1,x2,y2);
+  const a=atan2(y2-y1,x2-x1); const s=6+(w||2);
+  translate(x2,y2); rotate(a); noStroke(); triangle(0,0,-s,-s*0.5,-s,s*0.5); pop();
+}
+function meter(x,y,w,h,frac,c,label,val){
+  rrect(x,y,w,h,h/2, fc(COL.dim,60));
+  rrect(x,y,w*constrain(frac,0,1),h,h/2, fc(c));
+  if(label) tlabel(label,x,y-12,11.5,fc(COL.ink),LEFT);
+  if(val) tlabel(val,x+w,y-12,11.5,fc(c),RIGHT,BOLD);
+}
+function twinBar(x,y,label,a,b,mx,la,lb){
+  tlabel(label,x,y,11.5,fc(COL.ink),LEFT);
+  rrect(x,y+14,256,12,6,fc(COL.dim,50)); rrect(x,y+14,256*constrain(a/mx,0,1),12,6,fc(COL.dim,160));
+  tlabel(la,x+260,y+20,10.5,fc(COL.dim),LEFT);
+  rrect(x,y+30,256,12,6,fc(COL.dim,50)); rrect(x,y+30,256*constrain(b/mx,0,1),12,6,fc(COL.ok,200));
+  tlabel(lb,x+260,y+36,10.5,fc(COL.ok),LEFT);
+}
+function fragGrid(x,y,n,cell,c,litFrac){
+  for(let i=0;i<n;i++)for(let j=0;j<n;j++){
+    const k=(i*n+j)/(n*n);
+    rrect(x+j*cell,y+i*cell,cell-1,cell-1,1, fc(c, k<(litFrac===undefined?1:litFrac)?150:30));
+  }
+}
+function jit(i){ return (noise(i*0.37, gt*0.5)-0.5)*3.0; }
+function gfBadge(){
+  const s=STAGES[cur]; if(s.type!=='kernel') return;
+  const x=24,y=540,w=320,h=64;
+  rrect(x,y,w,h,10, fc(COL.tensor,26), fc(COL.tensor,180),2);
+  tlabel('实测吞吐 @4096³',x+14,y+15,11,fc(COL.dim),LEFT);
+  push(); fill(fc(COL.tensor)); noStroke(); textSize(25); textStyle(BOLD); textAlign(LEFT,CENTER);
+  text(s.gflops, x+14, y+38); textSize(12); textStyle(NORMAL); text(' GFLOPS', x+14+textWidth(''+s.gflops)+8, y+40); pop();
+  tlabel('util '+s.util+'% / '+s.peak,x+w-14,y+15,11.5,fc(COL.tensor),RIGHT,BOLD);
+  tlabel('SM Busy '+s.smbusy+' · 占用率 '+s.occ,x+w-14,y+36,10.5,fc(COL.dim),RIGHT);
+  tlabel('cyc/issue '+s.cyc,x+w-14,y+52,10.5,fc(COL.dim),RIGHT);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  VISUALIZATIONS
+// ════════════════════════════════════════════════════════════════════════
+const VIZ={};
+
+VIZ.intro=function(){
+  // left: CUDA core (1 FMA) vs Tensor Core (16x16x16 block)
+  tlabel('CUDA core：一条指令 = 1 次乘加', 30, 80, 14, fc(COL.ink), LEFT, BOLD);
+  const dx=60,dy=110; packet(dx,dy,8,COL.reg,false);
+  tlabel('a × b + c  →  1 个结果', dx+30, dy, 13, fc(COL.dim), LEFT);
+  tlabel('张量核：一条指令 = 一整块 16×16×16', 30, 165, 14, fc(COL.tensor), LEFT, BOLD);
+  // two input grids munched into one output
+  const gx=50,gy=190,cell=7;
+  fragGrid(gx,gy,16,cell, COL.glob, 1); tlabel('A 16×16', gx, gy+16*cell+10, 10, fc(COL.dim));
+  fragGrid(gx+140,gy,16,cell, COL.smem, 1); tlabel('B 16×16', gx+140, gy+16*cell+10, 10, fc(COL.dim));
+  // muncher
+  const mph=tri(gt*1.2);
+  rrect(gx+280, gy+10, 90, 90, 10, fc(COL.tensor, 60+mph*120), fc(COL.tensor),2);
+  tlabel('Tensor', gx+280+45, gy+45, 12, fc(COL.tensor,255), CENTER, BOLD);
+  tlabel('Core', gx+280+45, gy+62, 12, fc(COL.tensor,255), CENTER, BOLD);
+  arrow(gx+16*cell+4, gy+55, gx+278, gy+55, fc(COL.glob,150),2);
+  arrow(gx+140+16*cell+4, gy+55, gx+278, gy+55, fc(COL.smem,150),2);
+  fragGrid(gx+390, gy+18, 16, 4.5, COL.tensor, ease(mph)); tlabel('256 个乘加 / 指令', gx+390, gy+18+16*4.5+10, 10, fc(COL.tensor));
+  // power tiers (right + bottom)
+  const px=40, py=340, pw=600;
+  tlabel('同一张 H20 的三档算力（峰值 TFLOPS）', px, py-16, 13, fc(COL.ink), LEFT, BOLD);
+  const tiers=[['FP32 (CUDA core)',44,COL.green||COL.reg],['BF16 (Tensor Core)',148,COL.tensor],['FP8 (Tensor Core)',296,COL.glob]];
+  tiers.forEach((t,i)=>{ const y=py+i*44;
+    tlabel(t[0],px,y+11,12,fc(t[2]),LEFT);
+    rrect(px+170,y,pw-170,22,6,fc(COL.dim,40));
+    rrect(px+170,y,(pw-170)*(t[1]/296),22,6,fc(t[2],200));
+    tlabel(t[1]+'T',px+170+(pw-170)*(t[1]/296)+6,y+11,11,fc(t[2]),LEFT,BOLD);
+  });
+  // marker: cuda core topped at 25T
+  const mk=px+170+(pw-170)*(25/296);
+  push(); stroke(fc(COL.red)); strokeWeight(1.5); drawingContext.setLineDash([4,3]); line(mk,py-4,mk,py+3*44); drawingContext.setLineDash([]); pop();
+  tlabel('↑ 手写 CUDA core 到顶 ≈25T (FP32 的 57%)', mk-6, py+3*44+14, 11, fc(COL.red), LEFT);
+  tlabel('想快 5–10×？换引擎。但「有张量核」≠「喂得饱」——这正是后面 5 步要解决的。', 40, py+3*44+40, 13, fc(COL.tensor), LEFT, BOLD);
+  // a couple of tiers on right for continuity
+  drawTC(0.2); tierBox(T.smem,true); tierBox(T.glob,true);
+};
+
+VIZ.wmma_naive=function(){
+  drawTiers({reg:true,smem:false}, ctxOn? 0.175 : 0.2); vlane();
+  // many warps pulling fragments straight from global -> reg -> tensor (rarely)
+  const N=7;
+  for(let i=0;i<N;i++){ const ph=(gt*0.32+i/N)%1; const y=lerp(cyt(T.glob),cyt(T.reg),ease(ph));
+    packet(LANEX+(i-N/2)*7+jit(i), y, 6, COL.glob, i%2===0); }
+  arrow(LANEX, cyt(T.reg)+22, LANEX, cyt(T.glob)-12, fc(COL.glob,120),2);
+  tlabel('fragment 直接从最远的 DRAM 取', T.glob.x, 548, 11, fc(COL.glob));
+  // left: a warp loads 16x16 A,B fragment from global
+  const ox=40,oy=92,cell=9;
+  tlabel('一个 warp 取 A、B 两个 16×16 fragment（直接来自 global）',ox,oy-14,12,fc(COL.dim));
+  fragGrid(ox,oy,16,cell,COL.glob,1); tlabel('A_frag',ox,oy+16*cell+10,10,fc(COL.glob));
+  fragGrid(ox+160,oy,16,cell,COL.glob,1); tlabel('B_frag',ox+160,oy+16*cell+10,10,fc(COL.glob));
+  // tensor core mostly idle
+  const fed = ctxOn ? (tri(gt*0.5)>0.85?1:0) : 1;
+  rrect(ox+330,oy+20,100,100,10, fc(COL.tensor, fed?160:25), fc(COL.tensor,fed?255:120),2);
+  tlabel('Tensor',ox+330+50,oy+58,12,fc(COL.tensor,fed?255:120),CENTER,BOLD);
+  tlabel('Core',ox+330+50,oy+74,12,fc(COL.tensor,fed?255:120),CENTER,BOLD);
+  if(ctxOn) tlabel(fed?'(难得喂上一次)':'⏳ 空转中…等 fragment', ox+330+50, oy+128, 11.5, fed?fc(COL.tensor):fc(COL.red), CENTER, BOLD);
+  // bottleneck meters
+  const mx=40,my=300;
+  tlabel('张量核被「搬 fragment」饿死',mx,my,14,fc(COL.red),LEFT,BOLD);
+  meter(mx,my+24,560,16, 0.998, COL.red, 'L1/TEX（被搬 fragment 的访存指令打满）','99.8%');
+  meter(mx,my+62,560,16, 0.175, COL.tensor, 'SM Busy（张量核到底有多忙）','17.5%');
+  meter(mx,my+100,560,16, 1.0, COL.glob, 'warp cyc/issue（每发一条指令熬 109 周期）','109');
+  tlabel('long_scoreboard(等global) + mio_throttle(指令排队) = 74% —— 和 CUDA core 的 naive 同病',mx,my+128,11.5,fc(COL.dim));
+  gfBadge();
+};
+
+VIZ.wmma_smem=function(){
+  drawTiers({reg:true,smem:true}, 0.41); vlane();
+  const ph=(gt*0.5)%1;
+  if(ph<0.4){ const lp=ph/0.4;
+    for(let i=0;i<5;i++){ const y=lerp(cyt(T.glob),cyt(T.smem),ease(constrain(lp*1.2-i*0.05,0,1)));
+      packet(LANEX+(i-2)*12,y,6,COL.glob,false); }
+    tlabel('① 协作搬运：global → shared（搬一次）', T.smem.x, T.smem.y-12, 11.5, fc(COL.glob),LEFT,BOLD);
+  } else { const lp=(ph-0.4)/0.6;
+    for(let i=0;i<4;i++){ const t=(lp*2.5+i*0.25)%1; const y=lerp(cyt(T.smem),cyt(T.reg),ease(t));
+      packet(LANEX+(i-1.5)*9,y,5,COL.smem,false); }
+    tlabel('② load_matrix：shared → fragment → 张量核', T.smem.x, T.smem.y-12, 11.5, fc(COL.smem),LEFT,BOLD);
+  }
+  tlabel('搬进来的数被 4 个 warp 反复复用', T.smem.x+14, T.smem.y+T.smem.h-15, 11, fc(255,255,255,200));
+  // left: smem tile + reuse
+  const ox=40,oy=96,cell=15;
+  tlabel('共享内存里的 64×64 tile（搬一次，4 warp 复用）',ox,oy-14,11.5,fc(COL.dim));
+  for(let r=0;r<8;r++)for(let c=0;c<16;c++) rrect(ox+c*cell,oy+r*cell,cell-3,cell-3,2, fc(COL.smem,60),fc(COL.smem,120),1);
+  // gap timeline (ctx): tensor core has idle gaps during load_matrix + sync
+  if(ctxOn){
+    const tx=40,ty=300,tw=560;
+    tlabel('同步节奏：mma 之间夹着 load_matrix + __syncthreads 的空档',tx,ty-14,12,fc(COL.ink),LEFT,BOLD);
+    rrect(tx,ty,tw,26,6,fc(COL.dim,40));
+    for(let i=0;i<6;i++){ const x=tx+i*(tw/6);
+      rrect(x+2,ty+3,tw/6*0.45,20,3,fc(COL.tensor,200));      // compute (mma)
+      rrect(x+2+tw/6*0.5,ty+3,tw/6*0.42,20,3,fc(COL.red,120)); // idle: load/sync
+    }
+    tlabel('紫=张量核算  红=load/sync 空档（张量核闲）→ SM Busy 卡在 41%',tx,ty+40,11.5,fc(COL.dim));
+  }
+  // occupancy trade-off note
+  const mx=40,my=380;
+  twinBar(mx,my,'warp cyc/issue', 109,16.4, 110, 'naive 109','smem 16.4');
+  twinBar(mx,my+56,'SM Busy', 17.5,40.9, 100, 'naive 17.5%','smem 40.9%');
+  tlabel('占用率 71%→42%(寄存器↑)，但 cyc/issue 暴降 → 整体更快。占用率不是越高越好。',mx,my+112,11.5,fc(COL.tensor));
+  gfBadge();
+};
+
+VIZ.wmma_pipe=function(){
+  drawTiers({reg:true,smem:true}, 0.40); vlane();
+  // 3-stage ring buffer drawn in smem tier
+  tlabel('3 级 ring buffer', T.smem.x+14, T.smem.y-12, 11, fc(COL.smem),LEFT,BOLD);
+  const active=floor(gt*1.5)%3;
+  for(let i=0;i<3;i++){ const sx=T.smem.x+14+i*96;
+    rrect(sx, T.smem.y+30, 86, 40, 6, fc(COL.smem, i===active?120:35), fc(COL.smem,200),1.5);
+    tlabel('stage'+i, sx+8, T.smem.y+50, 10, fc(255,255,255,210), LEFT); }
+  // async prefetch packets glob->smem (continuous) + smem->tensor
+  for(let i=0;i<4;i++){ const t=(gt*0.7+i*0.25)%1; packet(LANEX, lerp(cyt(T.glob),cyt(T.smem),ease(t)), 5, COL.glob,false); }
+  for(let i=0;i<3;i++){ const t=(gt*0.9+i*0.33)%1; packet(LANEX, lerp(cyt(T.smem),cyt(T.reg),ease(t)), 5, COL.smem,false); }
+  // left: overlap timeline
+  const tx=40,ty=110,tw=560;
+  tlabel('cp.async：搬下一块 与 算当前块 重叠（不同硬件并行）',tx,ty-14,13,fc(COL.tensor),LEFT,BOLD);
+  const rows=[['cp.async 搬 stage n+1 (访存单元)',COL.glob],['张量核算 stage n (Tensor Core)',COL.tensor]];
+  for(let r=0;r<2;r++){ tlabel(rows[r][0],tx,ty+10+r*42,11,fc(rows[r][1]),LEFT);
+    for(let i=0;i<5;i++){ const x=tx+210+i*70; const off=r*35;
+      rrect(x+(r?-off:0), ty+r*42, 62, 22, 4, fc(rows[r][1],170)); } }
+  push(); stroke(fc(COL.tensor)); strokeWeight(2); line(tx+210+35,ty+74,tx+210+62,ty+74); pop();
+  tlabel('↑ 错开半拍 → 搬运被计算盖住；但仍是 warp 级 + 靠占用率，到 ~26% 见顶',tx,ty+96,11.5,fc(COL.dim));
+  // metrics
+  const mx=40,my=300;
+  twinBar(mx,my,'long_scoreboard（等数据）', 5.59,1.21, 6, 'smem 5.59','pipe 1.21(异步化)');
+  twinBar(mx,my+56,'util @4096³', 20.1,25.7, 100, 'smem 20.1%','pipe 25.7%');
+  tlabel('cp.async ↔ TMA、commit/wait ↔ mbarrier —— 这正是下一步 WGMMA 流水线的前身',mx,my+112,11.5,fc(COL.tensor));
+  gfBadge();
+};
+
+VIZ.wgmma=function(){
+  // register tier BYPASSED here
+  drawTiers({reg:false,smem:true}, 0.828); vlane();
+  // annotate bypass
+  push(); stroke(fc(COL.red,160)); strokeWeight(2); drawingContext.setLineDash([5,4]);
+  line(T.reg.x+4,T.reg.y+T.reg.h/2, T.reg.x+T.reg.w-4, T.reg.y+T.reg.h/2); drawingContext.setLineDash([]); pop();
+  tlabel('WGMMA 绕过寄存器', T.reg.x+T.reg.w-12, T.reg.y+12, 10, fc(COL.red), RIGHT);
+  // TMA fat arrow glob->smem (dedicated path, bypass L1/TEX)
+  const tphase=(gt*0.8)%1;
+  arrow(LANEX, cyt(T.glob)-8, LANEX, cyt(T.smem)+12, fc(COL.prod,120), 3);
+  packet(LANEX, lerp(cyt(T.glob),cyt(T.smem),ease(tphase)), 10, COL.prod, true);
+  tlabel('TMA：一个线程搬一整块（专用路径，不占 L1/TEX）', T.glob.x, 548, 10.5, fc(COL.prod));
+  // WGMMA: smem -> tensor directly (skip reg)
+  for(let i=0;i<3;i++){ const t=(gt*1.1+i*0.33)%1; packet(LANEX+18, lerp(cyt(T.smem),cyt(T.tc),ease(t)), 6, COL.cons, false); }
+  tlabel('WGMMA 操作数直取 smem', T.smem.x+14, T.smem.y-12, 10.5, fc(COL.cons),LEFT,BOLD);
+  // left: producer / consumer warpgroups + mbarrier handoff
+  const ox=40;
+  tlabel('warp specialization：两班工匠隔空击掌',ox,76,14,fc(COL.ink),LEFT,BOLD);
+  // producer box
+  rrect(ox,100,250,90,10, fc(COL.prod,28), fc(COL.prod,220),2);
+  tlabel('生产者 warpgroup',ox+12,120,12.5,fc(COL.prod),LEFT,BOLD);
+  tlabel('专跑 TMA：把 tile 异步搬进 smem',ox+12,142,11,fc(COL.dim),LEFT);
+  tlabel('搬好 → full.arrive()',ox+12,164,11,fc(COL.prod),LEFT);
+  // consumer box
+  rrect(ox,210,250,90,10, fc(COL.cons,28), fc(COL.cons,220),2);
+  tlabel('消费者 warpgroup',ox+12,230,12.5,fc(COL.cons),LEFT,BOLD);
+  tlabel('专跑 WGMMA：直取 smem 喂张量核',ox+12,252,11,fc(COL.dim),LEFT);
+  tlabel('算完 → empty.arrive()',ox+12,274,11,fc(COL.cons),LEFT);
+  // mbarrier handoff (ping-pong)
+  const pp=tri(gt*0.8);
+  const hx=300;
+  arrow(290, 150, hx+40, 150, fc(COL.prod, 80+pp*160),2);            // full -> consumer
+  arrow(hx+40, 260, 290, 260, fc(COL.cons, 80+(1-pp)*160),2);        // empty -> producer
+  rrect(hx+50, 165, 150, 80, 10, fc(COL.smem,30), fc(COL.smem,200),2);
+  tlabel('smem 3 级',hx+55,182,11,fc(COL.smem),LEFT,BOLD);
+  for(let i=0;i<3;i++){ const a=(floor(gt*1.5)%3)===i; rrect(hx+58+i*46, 198, 40, 34, 5, fc(COL.smem, a?140:40)); }
+  tlabel('mbarrier 交接',hx+55,238,10,fc(COL.dim),LEFT);
+  // the reversal callout
+  const mx=40,my=320;
+  tlabel('颠覆：占用率↓ 到 7.6%，SM Busy↑ 到 83%',mx,my,14,fc(COL.tensor),LEFT,BOLD);
+  twinBar(mx,my+20,'L1/TEX', 92.2,20.7, 100, 'cp.async 92.2%','WGMMA 20.7%(TMA专用)');
+  twinBar(mx,my+76,'占用率 (warp 多不多)', 33.4,7.6, 100, 'cp.async 33.4%','WGMMA 7.6%');
+  twinBar(mx,my+132,'SM Busy (张量核多忙)', 39.9,82.8, 100, 'cp.async 39.9%','WGMMA 82.8%');
+  tlabel('几乎没有 warp，张量核却被异步流水线喂得满满当当 → ×3.1，最大一跳',mx,my+186,11.5,fc(COL.tensor),LEFT,BOLD);
+  gfBadge();
+};
+
+VIZ.fp8=function(){
+  drawTiers({reg:false,smem:true}, 0.731); vlane();
+  tlabel('WGMMA 绕过寄存器', T.reg.x+T.reg.w-12, T.reg.y+12, 10, fc(COL.red), RIGHT);
+  // same pipeline, half-size packets
+  for(let i=0;i<5;i++){ const t=(gt*0.9+i*0.2)%1; packet(LANEX, lerp(cyt(T.glob),cyt(T.smem),ease(t)), 5, COL.prod,false); }
+  for(let i=0;i<4;i++){ const t=(gt*1.2+i*0.25)%1; packet(LANEX+16, lerp(cyt(T.smem),cyt(T.tc),ease(t)), 4, COL.cons,false); }
+  // left: BF16 vs FP8 packet size
+  const ox=40;
+  tlabel('同一条流水线，数据包减半 → 吞吐翻倍',ox,80,14,fc(COL.tensor),LEFT,BOLD);
+  tlabel('BF16：每个数 2 字节',ox,116,12,fc(COL.smem),LEFT);
+  for(let i=0;i<8;i++) rrect(ox+150+i*30, 106, 26, 20, 4, fc(COL.smem,170));
+  tlabel('FP8：每个数 1 字节（同样空间装下两倍元素）',ox,156,12,fc(COL.glob),LEFT,BOLD);
+  for(let i=0;i<16;i++) rrect(ox+150+i*15, 146, 13, 20, 3, fc(COL.glob,190));
+  // the 3 changes
+  const cx=ox,cy3=200;
+  tlabel('Hopper 异步骨架对精度「可插拔」——只改 3 处：',cx,cy3,13,fc(COL.ink),LEFT,BOLD);
+  const ch=[['① 元素类型','bf16 (2B) → fp8_e4m3 (1B)'],['② WGMMA 指令','…k16.bf16 → …k32.e4m3'],['③ BK','64 → 128（每行仍 128 字节，对齐 swizzle）']];
+  ch.forEach((c,i)=>{ const y=cy3+26+i*32;
+    rrect(cx,y,560,26,6, fc(COL.tensor,18), fc(COL.tensor,140),1);
+    tlabel(c[0],cx+12,y+13,12,fc(COL.tensor),LEFT,BOLD); tlabel(c[1],cx+120,y+13,12,fc(COL.dim),LEFT); });
+  tlabel('描述符魔数不变(smem 字节布局相同：128 行×128 字节，每条 wgmma 沿 K 跨 32 字节)',cx,cy3+26+3*32+6,11,fc(COL.dim));
+  // result
+  const mx=40,my=400;
+  twinBar(mx,my,'GFLOPS @4096³', 119357,224225, 240000, 'BF16 119357','FP8 224225 (1.88×)');
+  tlabel('= FP8 峰值(296T)的 75.8%（8192³ 84.8%）。CPU double 参考验证：算得对。',mx,my+56,11.5,fc(COL.tensor));
+  gfBadge();
+};
+
+VIZ.summary=function(){
+  const ks=STAGES.filter(s=>s.type==='kernel');
+  const ox=58,oy=104,bw=64,gap=22, base=400, maxH=300, span=ks.length*(bw+gap);
+  tlabel('张量核阶梯 @4096³（柱长 ∝ 绝对吞吐，满刻度 = FP8 峰值 296T）',ox,oy-16,13,fc(COL.ink),LEFT,BOLD);
+  // peak lines: BF16 148T, FP8 296T (=base top)
+  const yOf=(g)=> base-(g/FP8_PEAK)*maxH;
+  push(); stroke(fc(COL.tensor,150)); strokeWeight(1.3); drawingContext.setLineDash([6,5]);
+  line(ox-10,yOf(BF16_PEAK),ox+span-6,yOf(BF16_PEAK)); drawingContext.setLineDash([]); pop();
+  tlabel('BF16 峰值 148T',ox+span-96,yOf(BF16_PEAK)-9,10.5,fc(COL.tensor),LEFT);
+  push(); stroke(fc(COL.glob,150)); strokeWeight(1.3); drawingContext.setLineDash([6,5]);
+  line(ox-10,yOf(FP8_PEAK),ox+span-6,yOf(FP8_PEAK)); drawingContext.setLineDash([]); pop();
+  tlabel('FP8 峰值 296T',ox+span-96,yOf(FP8_PEAK)+11,10.5,fc(COL.glob),LEFT);
+  push(); stroke(fc(COL.dim)); strokeWeight(1.2); drawingContext.setLineDash([3,3]);
+  line(ox-10,yOf(CUBLAS_BF16),ox+span-6,yOf(CUBLAS_BF16)); drawingContext.setLineDash([]); pop();
+  ks.forEach((s,i)=>{ const x=ox+i*(bw+gap);
+    const target=(s.gflops/FP8_PEAK)*maxH; const grow=constrain(gt*0.6-i*0.14,0,1); const h=target*ease(grow);
+    const isFp8=s.gflops===224225, isLeap=s.gflops===119357;
+    const c=isFp8?COL.glob:isLeap?COL.tensor:COL.smem;
+    rrect(x,base-h,bw,h,5, fc(c,220));
+    tlabel(s.gflops,x+bw/2,base-h-12,10.5,fc(c),CENTER,BOLD);
+    tlabel(s.util+'%',x+bw/2,base-h+ (h>22?12:-24),9.5,fc(255,255,255,h>22?220:0),CENTER);
+    push(); translate(x+bw/2,base+10); rotate(-PI/7); tlabel(s.title.split('：')[0].replace('WGMMA + TMA + warp specialization','WGMMA+TMA+WS'),0,0,10,fc(COL.ink),RIGHT); pop();
+  });
+  // two-regime contrast
+  const rx=58,ry=470;
+  tlabel('两种藏延迟范式：占用率↓（红）  vs  SM Busy↑（紫）',rx,ry,12.5,fc(COL.tensor),LEFT,BOLD);
+  const occ=[71.2,42.0,33.4,7.6,7.4], busy=[17.5,40.9,39.9,82.8,73.1];
+  const gw=span-20,x0=rx,y0=ry+16,gh=58;
+  push(); strokeWeight(2.5);
+  for(let i=0;i<occ.length-1;i++){ const xa=x0+i*(gw/4),xb=x0+(i+1)*(gw/4);
+    stroke(fc(COL.red,210)); line(xa,y0+(1-occ[i]/100)*gh,xb,y0+(1-occ[i+1]/100)*gh);
+    stroke(fc(COL.tensor,210)); line(xa,y0+(1-busy[i]/100)*gh,xb,y0+(1-busy[i+1]/100)*gh);
+  } pop();
+  tlabel('WMMA 靠人多(TLP)',x0,y0+gh+14,10.5,fc(COL.red),LEFT);
+  tlabel('WGMMA 靠异步流水线',x0+210,y0+gh+14,10.5,fc(COL.tensor),LEFT);
+  // right: full-stack badge
+  const px=720,py=110,pw=258,ph=240;
+  rrect(px,py,pw,ph,12, fc(COL.tensor,22), fc(COL.tensor,180),2);
+  tlabel('全栈阶梯（H20）',px+16,py+22,12.5,fc(COL.ink),LEFT,BOLD);
+  const lines=[['FP32 · CUDA core','57% 峰值',COL.reg],['BF16 · WMMA','11→26%',COL.smem],['BF16 · WGMMA','80–88%',COL.tensor],['FP8 · WGMMA','75–85%',COL.glob]];
+  lines.forEach((l,i)=>{ const y=py+48+i*38;
+    rrect(px+14,y,pw-28,30,6, fc(l[2],16), fc(l[2],120),1);
+    tlabel(l[0],px+22,y+15,11.5,fc(l[2]),LEFT,BOLD); tlabel(l[1],px+pw-22,y+15,11.5,fc(COL.dim),RIGHT); });
+  tlabel('逼到 cuBLAS ~90%。',px+16,py+ph-30,11.5,fc(COL.ink),LEFT,BOLD);
+  tlabel('再上：persistent / cluster / CUTLASS',px+16,py+ph-12,10,fc(COL.dim),LEFT);
+  for(let i=0;i<3;i++){ const t=(gt*0.5+i/3)%1; packet(px+pw-30, py+ph-26-(ph-60)*t, 6, [COL.reg,COL.smem,COL.glob][i], true); }
+};
+
+// ════════════════════════════════════════════════════════════════════════
+//  EXPLANATION PANEL (HTML)
+// ════════════════════════════════════════════════════════════════════════
+function renderPanel(i){
+  const s=STAGES[i]; const E=document.getElementById('explain');
+  let h='';
+  h+=`<div class="etitle">${s.title} <span class="en">${s.en}${s.file?' · '+s.file:''}</span></div>`;
+  h+=`<div class="elede">${s.lede}</div>`;
+  if(s.type==='kernel'){
+    h+=`<div class="metrics-strip">
+      <div class="mstat"><div class="k">实测吞吐 @4096³</div><div class="v">${s.gflops}</div><div class="sub">GFLOPS</div></div>
+      <div class="mstat orange"><div class="k">利用率 util</div><div class="v">${s.util}%</div><div class="sub">vs ${s.peak} 峰值</div></div>
+      <div class="mstat"><div class="k">SM Busy（张量核多忙）</div><div class="v">${s.smbusy}</div><div class="sub">真正的体温计</div></div>
+      <div class="mstat gray"><div class="k">占用率 · cyc/issue</div><div class="v">${s.occ}</div><div class="sub">cyc/issue ${s.cyc}</div></div>
+    </div>`;
+  }
+  if(s.terms&&s.terms.length){
+    h+=`<div class="section-h">背景 &amp; 必要名词（先认识，再上手）</div><div class="terms">`;
+    s.terms.forEach(t=> h+=`<div class="term"><b>${t[0]}</b><span class="en">${t[1]}</span> &nbsp;${t[2]}</div>`);
+    h+=`</div>`;
+  }
+  if(s.type==='kernel'){
+    h+=`<div class="grid2">
+      <div class="card goal"><h4>🎯 直观目标</h4><p>${s.goal}</p></div>
+      <div class="card change"><h4>🔧 优化点（改了什么）</h4><p>${s.change}</p></div>
+      <div class="card reason"><h4>💡 为什么有效</h4><p>${s.reason}</p></div>
+      <div class="card effect"><h4>📈 最终效果</h4><p>${s.effect}</p>${bnHTML(s.bn)}</div>
+    </div>`;
+  } else if(s.bn){
+    h+=`<div class="grid2"><div class="card effect"><h4>📈 一图看尽</h4><p>${s.effect}</p>${bnHTML(s.bn)}</div>
+        <div class="card goal"><h4>🎯 目标</h4><p>${s.goal}</p></div></div>`;
+  }
+  h+=`<div class="section-h">算法 / 数据流 / 逻辑调用</div>`;
+  h+=`<pre class="algo">${algoHTML(s.algo)}</pre>`;
+  if(s.launch) h+=`<div class="flowline"><b>启动配置</b>：<code>${s.launch}</code></div>`;
+  h+=`<div class="flowline">${s.flow}</div>`;
+  if(s.key==='tc01') h+=`<div class="callout"><b>和 CUDA core 完全相同的开局：</b>朴素地从最慢的地方反复取数 → 引擎饿死。用张量核是「必要不充分」——接下来三步(smem → cp.async → WGMMA)就是把它一步步喂饱。</div>`;
+  if(s.key==='tc04') h+=`<div class="callout"><b>本质差别：</b>WMMA 靠<b>高占用率(TLP)</b>——很多 warp 轮流跑来盖住延迟；WGMMA 靠<b>深度异步流水线</b>——TMA 异步搬、WGMMA 异步算、mbarrier 衔接，一个 warpgroup 自己就把延迟流水起来。所以占用率 7.6% 却最快。这就是 Hopper 原生路线和 WMMA 的分水岭。</div>`;
+  if(s.key==='summary') h+=`<div class="callout"><b>一句话收口：</b>CUDA core 篇的主线是「ILP 取代 TLP」；张量核篇的主线是「<b>异步流水线取代 TLP</b>」。两篇合起来就是 H20 全栈 GEMM：把数据搬近、让等待有事做、让引擎永不挨饿。完整复现见仓库 <code>docs/13 H20 GEMM 复现总结</code>。</div>`;
+  h+=`<div class="navfoot">
+     <button class="button ghost" onclick="gotoStage(${Math.max(0,i-1)})" ${i===0?'disabled style="opacity:.4"':''}>← 上一阶段</button>
+     <button class="button" onclick="gotoStage(${Math.min(STAGES.length-1,i+1)})" ${i===STAGES.length-1?'disabled style="opacity:.4"':''}>下一阶段 →</button>
+     </div>`;
+  E.innerHTML=h;
+}
+function bnHTML(bn){ if(!bn) return ''; let h='<div style="margin-top:10px">';
+  bn.forEach(b=> h+=`<span class="bn">${b[0]} <span class="was">${b[1]}</span><span class="arr">→</span><span class="now">${b[2]}</span></span>`);
+  return h+'</div>'; }
+function algoHTML(lines){ if(!lines) return '';
+  return lines.map(line=> line.map(tok=>{ const cls=tok[0],txt=esc(tok[1]);
+    return cls?`<span class="${cls}">${txt}</span>`:txt; }).join('')).join('\n'); }
+function esc(t){ return (''+t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ════════════════════════════════════════════════════════════════════════
+//  LADDER NAV
+// ════════════════════════════════════════════════════════════════════════
+function buildLadder(){
+  const L=document.getElementById('ladder'); let h='';
+  STAGES.forEach((s,i)=>{
+    const isK=s.type==='kernel';
+    const w= isK? Math.round((s.gflops/FP8_PEAK)*100):0;
+    h+=`<button class="rung ${isK?'':'concept'}" id="rung${i}" onclick="gotoStage(${i})">
+      <span class="num">${isK? (s.file? (s.file.match(/\d+/)?parseInt(s.file.match(/\d+/)[0]):i):i):'·'}</span>
+      <span class="body"><span class="nm">${s.title}</span>
+      ${isK?`<span class="barwrap"><span class="bar" style="width:${w}%"></span></span>`:''}</span>
+      ${isK?`<span class="gf">${s.util}%</span>`:''}
+    </button>`;
+  });
+  L.innerHTML=h;
+}
+function selectStage(i){
+  cur=i; gt=0;
+  document.querySelectorAll('.rung').forEach((r,idx)=> r.classList.toggle('active', idx===i));
+  const s=STAGES[i]; const sec=document.getElementById('ctxSection');
+  if(s.ctx){ sec.style.display=''; document.getElementById('ctxLabel').textContent=s.ctx.label;
+    ctxOn=s.ctx.def; document.getElementById('ctx').checked=ctxOn; }
+  else sec.style.display='none';
+  renderPanel(i);
+}
+function gotoStage(i){ selectStage(i); window.scrollTo({top:0,behavior:'smooth'}); }
+
+// ════════════════════════════════════════════════════════════════════════
+//  UI HANDLERS
+// ════════════════════════════════════════════════════════════════════════
+function togglePlay(){ playing=!playing; document.getElementById('playBtn').textContent=playing?'⏸ 暂停':'▶ 播放'; }
+function stepFrame(){ playing=false; document.getElementById('playBtn').textContent='▶ 播放'; gt+=0.12; redraw(); }
+function toggleCtx(v){ ctxOn=v; }
+function updateParam(name,val){ params[name]=parseFloat(val);
+  if(name==='speed') document.getElementById('speed-value').textContent=parseFloat(val).toFixed(1)+'×'; }
+function updateSeedDisplay(){ document.getElementById('seed-input').value=params.seed; }
+function updateSeed(){ const v=parseInt(document.getElementById('seed-input').value);
+  if(v&&v>0){ params.seed=v; randomSeed(v); noiseSeed(v);} else updateSeedDisplay(); }
+function previousSeed(){ params.seed=Math.max(1,params.seed-1); updateSeedDisplay(); randomSeed(params.seed); noiseSeed(params.seed); }
+function nextSeed(){ params.seed+=1; updateSeedDisplay(); randomSeed(params.seed); noiseSeed(params.seed); }
+function randomSeedAndUpdate(){ params.seed=Math.floor(Math.random()*999999)+1; updateSeedDisplay(); randomSeed(params.seed); noiseSeed(params.seed); }
+function resetAll(){ params={...defaultParams};
+  document.getElementById('speed').value=params.speed; document.getElementById('speed-value').textContent=params.speed.toFixed(1)+'×';
+  updateSeedDisplay(); randomSeed(params.seed); noiseSeed(params.seed);
+  playing=true; document.getElementById('playBtn').textContent='⏸ 暂停'; selectStage(0); }
+function downloadPNG(){ saveCanvas('tensor_'+STAGES[cur].key,'png'); }
+window.addEventListener('load', ()=>{ updateSeedDisplay(); });
+</script>
+</body>
+</html>

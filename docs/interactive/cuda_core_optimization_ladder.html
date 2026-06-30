@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<!-- Latency Cartography · CUDA Core GEMM 优化阶梯 (interactive)
+     Built from algorithmic-art skill's viewer.html template:
+       KEPT  : Anthropic branding (colors/fonts/gradient), sidebar structure, seed controls, action buttons, self-contained single artifact.
+       VARIED: the p5.js algorithm (10 animated GPU-optimization scenes), parameters, and UI controls — per the Latency Cartography philosophy.
+     All numbers are real NVIDIA H20 (Hopper, CC 9.0) measurements from this repo's docs/ and profiling/. -->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CUDA Core GEMM 优化阶梯 · Latency Cartography</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Lora:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --anthropic-dark:#141413; --anthropic-light:#faf9f5; --anthropic-mid-gray:#b0aea5;
+  --anthropic-light-gray:#e8e6dc; --anthropic-orange:#d97757; --anthropic-blue:#6a9bcc; --anthropic-green:#788c5d;
+  --red:#c0392b; --card:#ffffff;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Poppins','PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif;
+  background:linear-gradient(135deg,var(--anthropic-light) 0%,#f5f3ee 100%);min-height:100vh;color:var(--anthropic-dark);}
+.container{display:flex;min-height:100vh;padding:18px;gap:18px;}
+/* ---------- Sidebar ---------- */
+.sidebar{width:330px;flex-shrink:0;background:rgba(255,255,255,0.96);backdrop-filter:blur(10px);
+  padding:22px;border-radius:14px;box-shadow:0 10px 30px rgba(20,20,19,.10);overflow-y:auto;overflow-x:hidden;max-height:calc(100vh - 36px);position:sticky;top:18px;}
+.sidebar h1{font-family:'Lora',serif;font-size:22px;font-weight:500;line-height:1.25;margin-bottom:6px;}
+.sidebar .subtitle{color:var(--anthropic-mid-gray);font-size:12.5px;margin-bottom:22px;line-height:1.5;}
+.control-section{margin-bottom:24px;}
+.control-section h3{font-size:13px;font-weight:600;letter-spacing:.02em;margin-bottom:12px;display:flex;align-items:center;gap:7px;text-transform:uppercase;color:#3a3a36;}
+.control-section h3::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--anthropic-orange);}
+/* ladder nav */
+.rung{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:transparent;border:1px solid transparent;
+  border-radius:9px;padding:7px 9px;margin-bottom:4px;cursor:pointer;transition:all .15s ease;}
+.rung:hover{background:var(--anthropic-light);}
+.rung.active{background:#fff;border-color:var(--anthropic-orange);box-shadow:0 2px 8px rgba(217,119,87,.18);}
+.rung .num{font-family:'Courier New',monospace;font-size:11px;color:var(--anthropic-mid-gray);width:16px;flex-shrink:0;text-align:right;}
+.rung .body{flex:1;min-width:0;}
+.rung .nm{font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rung .barwrap{height:5px;background:var(--anthropic-light-gray);border-radius:3px;margin-top:4px;overflow:hidden;}
+.rung .bar{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--anthropic-orange),#e89274);}
+.rung .gf{font-family:'Courier New',monospace;font-size:10.5px;color:var(--anthropic-mid-gray);flex-shrink:0;}
+.rung.concept .nm{color:var(--anthropic-blue);font-style:italic;}
+/* buttons */
+.button{background:var(--anthropic-orange);color:#fff;border:none;padding:9px 14px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;transition:all .18s ease;width:100%;font-family:inherit;}
+.button:hover{background:#c86641;transform:translateY(-1px);}
+.button:active{transform:translateY(0);}
+.button.secondary{background:var(--anthropic-blue);} .button.secondary:hover{background:#5a8bb8;}
+.button.tertiary{background:var(--anthropic-green);} .button.tertiary:hover{background:#6b7b52;}
+.button.ghost{background:var(--anthropic-light);color:#3a3a36;border:1px solid var(--anthropic-light-gray);}
+.button.ghost:hover{background:#fff;}
+.button-row{display:flex;gap:7px;} .button-row .button{flex:1;}
+.seed-controls{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:7px;}
+.seed-input{width:100%;background:var(--anthropic-light);padding:9px;border-radius:7px;font-family:'Courier New',monospace;font-size:13px;margin-bottom:9px;border:1px solid var(--anthropic-light-gray);text-align:center;}
+.seed-input:focus{outline:none;border-color:var(--anthropic-orange);background:#fff;}
+.control-group{margin-bottom:14px;}
+.control-group label{display:block;font-size:12.5px;font-weight:500;margin-bottom:6px;}
+.slider-container{display:flex;align-items:center;gap:10px;}
+.slider-container input[type=range]{flex:1;height:4px;background:var(--anthropic-light-gray);border-radius:2px;outline:none;-webkit-appearance:none;}
+.slider-container input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;background:var(--anthropic-orange);border-radius:50%;cursor:pointer;}
+.value-display{font-family:'Courier New',monospace;font-size:11.5px;color:var(--anthropic-mid-gray);min-width:42px;text-align:right;}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--anthropic-light);border:1px solid var(--anthropic-light-gray);border-radius:8px;padding:9px 11px;}
+.toggle-row .tl{font-size:12px;line-height:1.35;}
+.switch{position:relative;width:40px;height:22px;flex-shrink:0;cursor:pointer;}
+.switch input{opacity:0;width:0;height:0;}
+.slider-ui{position:absolute;inset:0;background:var(--anthropic-mid-gray);border-radius:22px;transition:.2s;}
+.slider-ui:before{content:'';position:absolute;height:16px;width:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;}
+.switch input:checked + .slider-ui{background:var(--anthropic-green);}
+.switch input:checked + .slider-ui:before{transform:translateX(18px);}
+.legend{font-size:11.5px;line-height:1.7;color:#54534d;}
+.legend .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle;}
+/* ---------- Main ---------- */
+.main{flex:1;min-width:0;display:flex;flex-direction:column;gap:16px;}
+.canvas-area{background:var(--card);border-radius:14px;box-shadow:0 18px 40px rgba(20,20,19,.10);overflow:hidden;}
+#canvas-container canvas{display:block;width:100%!important;height:auto!important;}
+.loading{padding:60px;text-align:center;color:var(--anthropic-mid-gray);}
+/* explanation panel */
+.explain{background:var(--card);border-radius:14px;box-shadow:0 18px 40px rgba(20,20,19,.10);padding:26px 30px 32px;}
+.explain .etitle{font-family:'Lora',serif;font-size:25px;font-weight:500;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;}
+.explain .etitle .en{font-family:'Courier New',monospace;font-size:13px;color:var(--anthropic-mid-gray);}
+.explain .elede{font-size:15px;line-height:1.6;color:#3a3a36;margin:10px 0 4px;}
+.metrics-strip{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 6px;}
+.mstat{flex:1;min-width:128px;background:var(--anthropic-light);border-radius:10px;padding:12px 14px;border-left:4px solid var(--anthropic-orange);}
+.mstat .k{font-size:11px;color:var(--anthropic-mid-gray);text-transform:uppercase;letter-spacing:.03em;}
+.mstat .v{font-family:'Courier New',monospace;font-size:21px;font-weight:600;margin-top:2px;}
+.mstat .sub{font-size:11px;color:#7a796f;margin-top:1px;}
+.mstat.blue{border-left-color:var(--anthropic-blue);} .mstat.green{border-left-color:var(--anthropic-green);} .mstat.gray{border-left-color:var(--anthropic-mid-gray);}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px;}
+@media(max-width:880px){.grid2{grid-template-columns:1fr;}}
+.card{border-radius:11px;padding:15px 17px;border:1px solid var(--anthropic-light-gray);background:#fff;}
+.card h4{font-size:13.5px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:7px;}
+.card p{font-size:13.5px;line-height:1.62;color:#3a3a36;}
+.card.goal{background:#fbf3ef;border-color:#f0d8cd;} .card.goal h4{color:var(--anthropic-orange);}
+.card.change{background:#eef4fa;border-color:#d3e2f0;} .card.change h4{color:#4d7fb0;}
+.card.reason{background:#f1f4ec;border-color:#dbe4cd;} .card.reason h4{color:#5f7344;}
+.card.effect{background:#f7f6f1;border-color:var(--anthropic-light-gray);} .card.effect h4{color:#3a3a36;}
+.bn{display:inline-flex;align-items:center;gap:7px;font-family:'Courier New',monospace;font-size:12px;background:#fff;border:1px solid var(--anthropic-light-gray);border-radius:20px;padding:3px 11px;margin:3px 4px 3px 0;}
+.bn .arr{color:var(--anthropic-orange);font-weight:700;}
+.bn .was{color:var(--red);} .bn .now{color:var(--anthropic-green);font-weight:600;}
+.section-h{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:#3a3a36;margin:24px 0 11px;display:flex;align-items:center;gap:8px;}
+.section-h::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--anthropic-blue);}
+.terms{display:flex;flex-direction:column;gap:8px;}
+.term{font-size:13px;line-height:1.55;}
+.term b{display:inline-block;background:var(--anthropic-dark);color:#fff;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:500;margin-right:8px;}
+.term .en{color:var(--anthropic-mid-gray);font-family:'Courier New',monospace;font-size:11px;}
+pre.algo{background:#1d1c1a;color:#e8e6dc;border-radius:10px;padding:15px 17px;font-family:'Courier New',monospace;font-size:12.5px;line-height:1.7;overflow-x:auto;white-space:pre;}
+pre.algo .cm{color:#9a9488;} pre.algo .hl{color:var(--anthropic-orange);} pre.algo .kw{color:#7fb0e0;} pre.algo .gn{color:#a9c08a;}
+.flowline{font-size:13px;line-height:1.6;background:var(--anthropic-light);border-radius:9px;padding:12px 15px;margin-top:12px;}
+.flowline code{font-family:'Courier New',monospace;background:#fff;border:1px solid var(--anthropic-light-gray);border-radius:5px;padding:1px 6px;font-size:12px;}
+.callout{margin-top:16px;border-radius:10px;padding:14px 17px;font-size:13.5px;line-height:1.62;background:#fdf6ec;border:1px solid #f1dcc0;}
+.callout b{color:#b5651d;}
+.navfoot{display:flex;justify-content:space-between;gap:10px;margin-top:26px;}
+.navfoot .button{max-width:200px;}
+@media(max-width:760px){.container{flex-direction:column;}.sidebar{width:100%;position:static;max-height:none;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- ============ SIDEBAR (Anthropic branding + structure kept) ============ -->
+  <div class="sidebar">
+    <h1>CUDA Core GEMM 优化阶梯</h1>
+    <div class="subtitle">从最朴素的矩阵乘法，一步步逼近 cuBLAS。<br>每一步都问同一个问题：<b>此刻这段等待，能塞进什么活？</b><br><span style="color:#c0a18f">所有数字均为 NVIDIA H20 真机实测 · 4096³</span></div>
+
+    <!-- Stage ladder = primary navigation -->
+    <div class="control-section">
+      <h3>优化阶梯（点击切换）</h3>
+      <div id="ladder"></div>
+      <div style="font-size:11px;color:var(--anthropic-mid-gray);margin-top:6px;text-align:center">虚线 = cuBLAS SGEMM 30266 GFLOPS（标杆）</div>
+    </div>
+
+    <!-- Playback -->
+    <div class="control-section">
+      <h3>动画</h3>
+      <div class="button-row" style="margin-bottom:9px;">
+        <button class="button" id="playBtn" onclick="togglePlay()">⏸ 暂停</button>
+        <button class="button ghost" onclick="stepFrame()">单步 ⏭</button>
+      </div>
+      <div class="control-group">
+        <label>播放速度</label>
+        <div class="slider-container">
+          <input type="range" id="speed" min="0.2" max="2.2" step="0.1" value="1.0" oninput="updateParam('speed',this.value)">
+          <span class="value-display" id="speed-value">1.0×</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contextual scene toggle (meaning changes per stage) -->
+    <div class="control-section" id="ctxSection">
+      <h3>本阶段开关</h3>
+      <label class="toggle-row">
+        <span class="tl" id="ctxLabel">—</span>
+        <span class="switch"><input type="checkbox" id="ctx" checked onchange="toggleCtx(this.checked)"><span class="slider-ui"></span></span>
+      </label>
+    </div>
+
+    <!-- Seed (kept from template; drives the organic packet shimmer) -->
+    <div class="control-section">
+      <h3>随机种子（粒子抖动）</h3>
+      <input type="number" id="seed-input" class="seed-input" value="12345" onchange="updateSeed()">
+      <div class="seed-controls">
+        <button class="button secondary" onclick="previousSeed()">← 上一个</button>
+        <button class="button secondary" onclick="nextSeed()">下一个 →</button>
+      </div>
+      <button class="button tertiary" onclick="randomSeedAndUpdate()">↻ 随机</button>
+    </div>
+
+    <!-- Legend -->
+    <div class="control-section">
+      <h3>图例</h3>
+      <div class="legend">
+        <span class="dot" style="background:#d97757"></span>全局内存 DRAM（最远 ≈400+ 周期）<br>
+        <span class="dot" style="background:#6a9bcc"></span>共享内存 Shared（片上 ≈20 周期）<br>
+        <span class="dot" style="background:#788c5d"></span>寄存器 Register（最快 ≈1 周期）<br>
+        <span class="dot" style="background:#141413"></span>ALU 计算单元（乘加 FMA）<br>
+        <span class="dot" style="background:#c0392b"></span>等待 / 冲突 / 瓶颈
+      </div>
+    </div>
+
+    <!-- Actions (kept) -->
+    <div class="control-section">
+      <h3>操作</h3>
+      <div class="button-row">
+        <button class="button ghost" onclick="resetAll()">重置</button>
+        <button class="button ghost" onclick="downloadPNG()">下载 PNG</button>
+      </div>
+      <div style="margin-top:9px"><a href="tensor_core_optimization_ladder.html" style="font-size:12px;color:var(--anthropic-blue);text-decoration:none">下一篇：Tensor Core 优化阶梯 →</a></div>
+    </div>
+  </div>
+
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <div class="canvas-area"><div id="canvas-container"><div class="loading">正在初始化可视化…</div></div></div>
+    <div class="explain" id="explain"></div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════
+//  STAGE DATA — content is data-driven; all metrics are real H20 measurements
+//  (sources: repo docs/02–07, docs/13, profiling/throughput_4096.txt, SUMMARY.md)
+// ════════════════════════════════════════════════════════════════════════
+const CUBLAS = 30266;            // cuBLAS SGEMM @4096^3, GFLOPS (the yardstick)
+const PEAK   = 44000;            // ~FP32 peak TFLOPS on H20
+
+const STAGES = [
+{
+  key:'intro', type:'concept', viz:'intro',
+  title:'先看懂这场游戏', en:'why latency, not flops',
+  lede:'GPU 算一次乘加只要 ≈1 个周期，但从最远的全局内存取一个数要熬 ≈400+ 个周期。所以矩阵乘法优化的全部秘密，不是「算得更快」，而是「<b>让数据待在近处</b>」并「<b>在等待时找到事做</b>」。下面 8 级阶梯，就是把这两件事一步步做到极致。',
+  terms:[
+    ['GEMM 矩阵乘法','general matrix multiply','我们要算 C = α·A·B + β·C。其中 C 的每个元素 = A 的一行 与 B 的一列 逐个相乘再相加（点积），要累加 K 次。'],
+    ['线程 / 线程块 / Warp','thread / block / warp','线程是最小执行单位；32 个线程绑成一个 warp 一起动作；很多线程组成一个 block 跑在一个 SM 上。H20 有 78 个 SM。'],
+    ['内存层级','memory hierarchy','离计算单元越近越快越小：寄存器(最快) → 共享内存(片上) → 全局内存 DRAM(最大最慢)。'],
+    ['周期 / 延迟','cycle / latency','延迟 = 一条指令从发出到拿到结果要等的周期数。访存延迟是 GEMM 的头号敌人。'],
+  ],
+  goal:'建立直觉：慢的不是算，是等。', change:'—', reason:'—', effect:'—',
+  algo:[
+    [['cm','// C 的一个元素 = 一行 · 一列（点积，累加 K 次）']],
+    [['','C[i][j] = 0']],
+    [['kw','for '],['','k in 0..K:']],
+    [['','    C[i][j] += A[i][k] * B[k][j]   '],['cm','// 取数、取数、乘加']],
+    [['','C[i][j] = α·C[i][j] + β·C[i][j]']],
+  ],
+  flow:'整条阶梯只优化一件事：<b>藏延迟</b>。把反复用的数搬近（省等待），并让独立的计算填满等待的缝隙（不空转）。',
+  ctx:null,
+},
+{
+  key:'naive', type:'kernel', viz:'naive', file:'01_naive.cu', launch:'block(32,32) · grid(N/32, M/32)',
+  title:'朴素版：一线程算一个元素', en:'naive_kernel · id 1',
+  gflops:3532, pct:11.7, occ:'99.8%', cyc:'37.78',
+  lede:'最直接的写法：开 M×N 个线程，每个线程独立算 C 的一个元素——自己跑完整条 K 长度的点积，每个数都现去全局内存取。能算对，但慢得离谱。',
+  terms:[
+    ['全局内存访问延迟','long_scoreboard','warp 卡住等远程内存(global)返回结果。朴素版这一项 stall 高达 13.95，一骑绝尘——病根就是它。'],
+    ['占用率','occupancy','一个 SM 上「实际活跃的 warp 数 / 硬件上限」。朴素版占用率几乎顶满 99.8%。'],
+    ['调度器空转','No Eligible','某周期没有任何 warp 能发指令，调度器干瞪眼。朴素版高达 57.78%——大家同时在等内存，谁也补不了谁。'],
+  ],
+  goal:'先有一个能算对的基准，并看清它到底卡在哪。',
+  change:'每个线程负责 C 的 1 个元素，独立完成整条 K 的点积，A、B 全部现取自全局内存，无任何复用。',
+  reason:'相邻线程（算 C[i][j] 和 C[i][j+1]）会把 A 的同一行反复读很多遍——大量重复的远程访问。64 个 warp 几乎同时卡在等 global 上，占用率顶满也没用：谁也补不上谁的空窗。',
+  effect:'瓶颈是「等全局内存」。这是后面每一步要拆解的起点。',
+  bn:[['long_scoreboard','—','13.95 (独大)'],['占用率','—','99.8% 顶满'],['空转 No-Eligible','—','57.78%']],
+  algo:[
+    [['cm','// 每个线程：算 C 的一个元素']],
+    [['','row, col = 本线程坐标']],
+    [['kw','for '],['','k in 0..K:']],
+    [['hl','    acc += A[row][k] * B[k][col]   '],['cm','// 每次都现取自 global！']],
+    [['','C[row][col] = α·acc + β·C[row][col]']],
+  ],
+  flow:'数据流：<code>global A,B</code> → 线程寄存器 <code>acc</code> → <code>global C</code>。<b>无中转、无复用</b>，每个结果都把整行整列从最慢的地方搬一遍。',
+  ctx:{label:'高亮「重复读取」的浪费', def:true},
+},
+{
+  key:'smem', type:'kernel', viz:'smem', file:'02_smem.cu', launch:'block(32,32)，每 block 协作搬运一个 tile',
+  title:'搬进共享内存：让数据被复用', en:'smem_kernel · id 2',
+  gflops:5411, pct:17.9, occ:'99.7%', cyc:'43.66',
+  lede:'既然相邻线程反复读同样的数，那就让一个 block 协作着把 A、B 的一小块搬进「共享内存」（片上、快得多），之后大家都从这里读。方向完全正确，但出现了新瓶颈。',
+  terms:[
+    ['共享内存','shared memory','SM 片上的一小块高速 SRAM，一个 block 内的线程共享。把热数据放这里，避免反复跑去远方的 global。'],
+    ['分块','tiling','把大矩阵切成能塞进共享内存的小块(tile)，一块一块地搬进来算。'],
+    ['LDS 指令 / MIO 队列','LDS / MIO','从共享内存读数据用 LDS 指令，它们都排在 MIO 这条队列里发射。'],
+    ['MIO 拥塞','mio_throttle','MIO 队列被 LDS 塞满，新的 LDS 发不进去。smem 版这一项飙到 21.74，成了新病根。'],
+  ],
+  goal:'消灭朴素版的重复远程读取，把热数据搬到近处复用。',
+  change:'每个 block 协作把 A、B 的一个 tile 搬进共享内存 As/Bs（搬一次），<code>__syncthreads()</code> 同步后，所有线程改从共享内存做点积。',
+  reason:'搬进来的每个数会被 tile 那一维（32 个线程）复用，DRAM 访问大幅减少，Duration 41→27 ms。但节奏是「取一次 → 算一次」：每个乘加前都得来一条 LDS，LDS 太密 → MIO 队列堵死。',
+  effect:'病根从「等 global」换成了「MIO 拥塞」——典型的按下葫芦浮起瓢。说明要改节奏：一次取数，多次计算。',
+  bn:[['Duration','41 ms','27.3 ms'],['long_scoreboard','13.95','7.07'],['新瓶颈 mio_throttle','≈0','21.74']],
+  algo:[
+    [['cm','// 每个 K 方向的小块：协作搬入 → 同步 → 计算']],
+    [['kw','for '],['','bk in 0..K step 32:']],
+    [['gn','    As[ty][tx] = A[...]; Bs[ty][tx] = B[...]   '],['cm','// 全 block 搬一次']],
+    [['kw','    __syncthreads()']],
+    [['kw','    for '],['','k in 0..32:']],
+    [['hl','        acc += As[ty][k] * Bs[k][tx]   '],['cm','// 改从 shared 取(快)']],
+    [['kw','    __syncthreads()']],
+  ],
+  flow:'数据流：<code>global</code> →(搬一次)→ <code>shared As/Bs</code> →(每次 FMA 取一次)→ 线程 <code>acc</code> → <code>global C</code>。复用发生在 shared 这一侧。',
+  ctx:{label:'显示 MIO 队列拥塞', def:true},
+},
+{
+  key:'block1d', type:'kernel', viz:'block1d', file:'03_blocktiling.cu', launch:'block(64,8)',
+  title:'寄存器分块(1D)：一次取数喂多次算', en:'blocktiling · id 3',
+  gflops:9410, pct:31.1, occ:'48.7%', cyc:'≈16',
+  lede:'smem 堵在「取一次只算一次」。解法：让一个线程负责一整列 TM=8 个结果。把 B 的一个值取进寄存器后，拿它连续喂 8 次乘加——取数和计算的比例一下子被压平。',
+  terms:[
+    ['寄存器','register','每个线程私有、最快的存储。把共享内存的数先攒进寄存器，就能反复使用而不必每次再发 LDS。'],
+    ['算术强度','arithmetic intensity','「每取一次数，能喂多少次计算」。这个比值越高，访存压力越小。这是登顶的核心杠杆。'],
+    ['指令级并行','ILP','一个线程内部多条互不依赖的指令可以同时在流水线里飞，用来填补等待的空窗（不靠堆 warp）。'],
+  ],
+  goal:'压低「LDS : FMA」的比例——让搬进来的每个数被算更多次。',
+  change:'一个线程负责 C 的一竖条 TM=8 个元素。内循环里把 Bs 的一个值取进寄存器 b，再用它和 8 个 As 值连算 8 次乘加。',
+  reason:'一条 LDS 取来的数喂了 8 次 FMA，取数指令密度骤降，MIO 拥塞缓解，cyc/issue 从 43 一路掉到 ~16。代价是寄存器变多、占用率降到 48.7%——但开始划算了。',
+  effect:'吞吐近乎翻倍(5411→9410)。范式开始转向：不再单纯靠「取一次算一次」。',
+  bn:[['GFLOPS','5411','9410'],['cyc/issue','43.66','≈16'],['一次取数喂','1 次 FMA','8 次 FMA']],
+  algo:[
+    [['cm','// 一个线程负责 TM=8 个 C（一竖条）']],
+    [['kw','for '],['','k in 0..BK:']],
+    [['gn','    b = Bs[k][col]            '],['cm','// 取 1 次进寄存器']],
+    [['kw','    for '],['','i in 0..8:']],
+    [['hl','        acc[i] += As[row+i][k] * b   '],['cm','// 复用 b，喂 8 次']],
+  ],
+  flow:'数据流：<code>global</code> → <code>shared</code> → <b>寄存器(复用)</b> → <code>acc[8]</code>。新增了寄存器这一层复用，把 shared 的访问次数摊薄。',
+  ctx:{label:'显示「一次取数喂 8 次算」', def:true},
+},
+{
+  key:'block2d', type:'kernel', viz:'block2d', file:'04_2Dblocktiling.cu', launch:'block(16,8)',
+  title:'寄存器分块(2D)：外积，范式转折点', en:'2D blocktiling · id 4',
+  gflops:15548, pct:51.4, occ:'30.3%', cyc:'8.18',
+  lede:'把 1D 推到二维：一个线程负责 8×4=32 个结果。取 8 个 A、4 个 B 进寄存器（共 12 次取数），做一次「外积」得到 32 个乘加。这是整条阶梯最关键的认知转折。',
+  terms:[
+    ['外积','outer product','8 个 regA × 4 个 regB → 8×4 的乘加网格。12 次取数换来 32 次计算，算术强度拉满。'],
+    ['TLP vs ILP','thread- vs instruction-level parallelism','藏延迟的两条路：TLP=堆很多 warp 互相填空窗；ILP=单线程内塞满独立指令。本步开始从 TLP 切到 ILP。'],
+  ],
+  goal:'把算术强度进一步拉高，并完成「靠 ILP 藏延迟」的范式切换。',
+  change:'一个线程负责 8×4 的 C 小块。每个 k：取 regA[8]、regB[4]，再用双重循环做 32 个独立乘加（外积）。',
+  reason:'32 个互不依赖的乘加本身就是一长串能填满流水线的独立指令(ILP)。于是 cyc/issue 暴跌 43.66→8.18、mio_throttle 21.74→0.22。即便占用率从 99% 砸到 30%，调度器空转反而更少(63%→40%)——<b>少而密的 warp，赢过多而齐刷刷等待的 warp</b>。',
+  effect:'吞吐再翻倍到 15548（cuBLAS 的 51%）。从此「占用率低」不再是坏事。',
+  bn:[['cyc/issue','43.66','8.18'],['mio_throttle','21.74','0.22'],['占用率','99.7%','30.3%(却更快)']],
+  algo:[
+    [['cm','// 一个线程负责 8×4=32 个 C（外积）']],
+    [['kw','for '],['','k in 0..BK:']],
+    [['gn','    regA[0..8] = As 的一列;  regB[0..4] = Bs 的一行   '],['cm','// 取 12 次']],
+    [['kw','    for '],['','i in 0..8: '],['kw','for '],['','j in 0..4:']],
+    [['hl','        acc[i][j] += regA[i] * regB[j]   '],['cm','// 32 次独立 FMA']],
+  ],
+  flow:'数据流：<code>shared</code> → <b>regA[8] / regB[4]</b> → 外积 → <code>acc[8][4]</code>。一次取数(12) 喂出 32 次计算，独立乘加填满流水线。',
+  ctx:{label:'显示 ILP 流水线（独立乘加填空窗）', def:true},
+},
+{
+  key:'vectorized', type:'kernel', viz:'vectorized', file:'05_vectorized.cu', launch:'block(16,8) · float4',
+  title:'float4 向量化：一条指令搬 4 个', en:'vectorized · id 5',
+  gflops:22790, pct:75.3, occ:'48.1%', cyc:'11.21',
+  lede:'用 float4 让一条指令一次读写 128 位（4 个 float）。你以为它是来省带宽的——其实它真正的红利出人意料：省寄存器，从而提高占用率。',
+  terms:[
+    ['向量化访存','float4 / LD.128','一条 128 位的读写指令顶 4 条 32 位指令。指令数直接降到 1/4。'],
+    ['寄存器压力','register pressure','线程用的寄存器越多，一个 SM 能同时容纳的 warp 越少（占用率被寄存器卡住）。'],
+  ],
+  goal:'减少访存指令条数，并缓解寄存器压力。',
+  change:'把 As/Bs 的搬运与寄存器装载都换成 float4（一条 LD.128 / ST.128 顶 4 条），写回 C 也用 float4。',
+  reason:'反直觉点：L1/TEX 并没怎么降（还是 ~90%）。真正的收益是——float4 让编译器把寄存器打得更紧(96→63)，于是每个 SM 能塞下更多 warp，占用率 30%→48%，靠并发把延迟摊薄，速度上来了。',
+  effect:'吞吐冲到 22790（cuBLAS 的 75%）。但也暴露出两个布局问题：全局读不合并、写 shared 撞 bank——交给下一步。',
+  bn:[['GFLOPS','15548','22790'],['寄存器/线程','96','63'],['占用率','30.3%','48.1%']],
+  algo:[
+    [['cm','// float4：一条指令搬 4 个 float']],
+    [['gn','float4 t = *(float4*)&A[...]        '],['cm','// 1 条 LD.128 = 4 条 LD.32']],
+    [['','As[..]=t.x; As[..]=t.y; ... =t.w']],
+    [['cm','// 计算逻辑同 2D 分块，但寄存器更省 → warp 更多']],
+  ],
+  flow:'数据流同 2D 分块，但每条搬运指令的「箭头变粗」：<code>LD.128</code> 一次性吞 4 个 float。寄存器省下来 → 更多 warp 并发。',
+  ctx:{label:'对比：4 条细箭头 → 1 条粗箭头', def:true},
+},
+{
+  key:'warptile', type:'kernel', viz:'warptile', file:'08_warptile_vec.cu', launch:'block(128) = 4 warp',
+  title:'Warp 分块：让 32 个线程协同', en:'warptile_vec · id 10',
+  gflops:23971, pct:79.2, occ:'24.1%', cyc:'5.45',
+  lede:'引入「warp」这一中间层：先规定每个 warp 负责 C 的哪一块连续区域，再安排 warp 内 32 个 lane 怎么排，让它们的访存对齐、共享取数。这是手写 CUDA core 的最快版本。',
+  terms:[
+    ['Warp 分块','warp tiling','在 block 和 thread 之间加一层：每个 warp 管一块 WM×WN 区域，warp 内 lane 之间能共享从 shared 取来的 regA/regB。'],
+    ['Lane','lane','warp 里的 32 个线程，编号 0–31。'],
+    ['L1/TEX 管线','L1/TEX throughput','shared 访问也走这条片上 LSU 管线。warp 级复用能把它的压力卸下来。'],
+    ['负优化','negative optimization','改了反而更慢。标量版 warp tile 就是个反例——寄存器爆到 211、占用率砸到 12%。'],
+  ],
+  goal:'用 warp 级复用进一步卸掉 L1/TEX 压力，砍掉延迟。',
+  change:'显式按 warp 划分 C 区域；warp 内 lane 协作取 regA/regB（float4），做外积累加。',
+  reason:'同一 warp 的 lane 之间共享了从 shared 取出的值，每线程的 shared 访问次数下降，L1/TEX 压力 90%→67%、cyc/issue 11.21→5.45、mio 归零。注意：占用率只有 24%，却是最快——<b>低占用 + 高 ILP 照样赢</b>。',
+  effect:'23971 GFLOPS（cuBLAS 的 79.2%）。但前提是 float4：标量版会让寄存器爆炸、占用率崩盘，反成负优化。',
+  bn:[['L1/TEX','89.8%','67.5%'],['cyc/issue','11.21','5.45'],['标量版对照','12843(慢)','23971(快)']],
+  algo:[
+    [['cm','// 先按 warp 划块，warp 内 lane 协作']],
+    [['','warp 负责 C 的一块 WM×WN']],
+    [['kw','for '],['','k in 0..BK:']],
+    [['gn','    regA = As 里本 warp 的列(float4)']],
+    [['gn','    regB = Bs 里本 warp 的行(float4)']],
+    [['hl','    外积累加   '],['cm','// lane 间共享 regA/regB → L1 压力↓']],
+  ],
+  flow:'层级：<code>block</code> → <b>warp(32 lane)</b> → thread。warp 这一层让访存对齐、共享，把顶满的 L1/TEX 卸下来。',
+  ctx:{label:'对照标量版 warp tile（负优化）', def:false},
+},
+{
+  key:'bank', type:'kernel', viz:'bank', file:'09_bankconflict.cu', launch:'block(128)，As 加 +4 padding',
+  title:'Bank 冲突：一堂「指标会骗人」的课', en:'bank_conflict · id 11',
+  gflops:21519, pct:71.0, occ:'22.0%', cyc:'5.18',
+  lede:'共享内存被分成 32 个 bank，同一拍里多个 lane 撞进同一个 bank 就得排队。给数组每行加 4 个 float 的 padding 可以把它们错开。冲突确实大降了——但速度反而没涨。这一课比加速更值钱。',
+  terms:[
+    ['Bank / 存储体','bank','共享内存切成 32 个 bank，32 个 lane 各打不同 bank 才能一拍完成。'],
+    ['Bank 冲突','bank conflict','多个 lane 同拍打到同一 bank 的不同地址 → 硬件被迫拆成多拍，变慢。'],
+    ['Padding','padding','给每行多留几个空位，改变地址对 32 取模的结果，把访问错开到不同 bank。'],
+    ['关键路径瓶颈','binding bottleneck','只有「消除后总时间真的下降」的瓶颈才值得打。ncu 上数字吓人 ≠ 它在关键路径上。'],
+  ],
+  goal:'消除 warp 步骤遗留的「写 As 撞 bank」（op_st 高达 2190 万）。',
+  change:'给 As 每行加 +4 padding：<code>As[BK][BM+4]</code>。为什么是 4 不是 1？要让 (BM+4)%32 = 慢变维宽度，32 个 lane 才完全错开。',
+  reason:'padding + 搬运映射改造把写冲突砍了约 4×（2190 万→560 万），全局读合并也从 16 改善到 8.16 sec/req。<b>但吞吐没涨反而略降</b>(23971→21519)——因为在 H20 这张「带宽厚、片上余量大」的卡上，bank 冲突早就不在关键依赖链上了。',
+  effect:'一个「ncu 显眼、却非关键路径」的瓶颈。核心判断力：看消除它之后 Duration 降不降，而不是看它的计数有多吓人。',
+  bn:[['写 bank 冲突','2190 万','560 万'],['全局读 sec/req','16','8.16'],['GFLOPS','23971','21519(略降!)']],
+  algo:[
+    [['cm','// 共享内存有 32 个 bank，撞同 bank = 排队']],
+    [['hl','__shared__ float As[BK][BM + 4];   '],['cm','// +4 padding 错开 bank']],
+    [['cm','// 推导：(BM+p) % 32 = 慢变维宽度(4) → p=4 才完全错开']],
+    [['cm','//      p=1 只能削一半，留下斜条纹']],
+  ],
+  flow:'同一拍 32 个 lane 的 shared 写：无 padding → 撞进 8 个 bank（8-way 冲突，拆 8 拍）；+4 padding → 铺满 32 个 bank（1 拍完成）。',
+  ctx:{label:'开启 +4 padding（关 = 看冲突）', def:false},
+},
+{
+  key:'double', type:'kernel', viz:'double', file:'10_doublebuffer.cu', launch:'block(128)，As/Bs 各开 2 块',
+  title:'双缓冲：搬运与计算同时进行', en:'double_buffer · id 12',
+  gflops:25132, pct:83.0, occ:'24.2%', cyc:'4.96',
+  lede:'手写阶梯的收官：开两块共享缓冲乒乓切换。当 ALU 在算当前这块时，搬运单元已经在把「下一块」预取进另一块缓冲——计算和搬运重叠起来，加载延迟被彻底盖住。',
+  terms:[
+    ['双缓冲','double buffering','两块缓冲 buf[0]/buf[1] 轮流用：算 buf[cur] 的同时，往 buf[cur^1] 预取下一块。'],
+    ['预取','prefetch','在需要之前就提前发起加载，让漫长的搬运在后台进行。'],
+    ['软件流水线','software pipelining','把「搬下一块」和「算这一块」排成重叠的流水线，让两种硬件单元同时忙。'],
+  ],
+  goal:'把「搬 global→shared 的等待」藏到「计算」背后。',
+  change:'开 <code>As[2]/Bs[2]</code>。循环里：先发起对 buf[cur^1] 的下一块预取，再用 buf[cur] 计算当前块，算完交换 cur。',
+  reason:'搬运(访存单元)和计算(ALU)是不同硬件，让它们同时工作就能重叠。于是 cyc/issue 进一步降到 4.96(全场最低)、Compute(SM) 升到 75.56%(手写最高)。占用率依旧只有 24%——再次印证：靠 ILP+预取，而非高占用率。',
+  effect:'登顶 25132 GFLOPS = cuBLAS SGEMM 的 83%、FP32 峰值的 57%。手写 CUDA core 到此见顶。',
+  bn:[['GFLOPS','23971','25132(最高)'],['cyc/issue','5.45','4.96(最低)'],['Compute(SM)','69.5%','75.6%']],
+  algo:[
+    [['cm','// 双缓冲乒乓：搬下一块 与 算这一块 重叠']],
+    [['gn','load tile0 → buf[0]']],
+    [['kw','for '],['','每个 K 小块:']],
+    [['gn','    预取下一块 → buf[cur^1]     '],['cm','// 访存单元在搬']],
+    [['hl','    用 buf[cur] 算当前块         '],['cm','// ALU 在算(同时!)']],
+    [['','    cur ^= 1                   '],['cm','// 交换缓冲']],
+  ],
+  flow:'时间线：迭代 n 的「计算」与 迭代 n+1 的「加载」在同一段时间并行。访存延迟被计算盖住 → 流水线几乎不空转。',
+  ctx:{label:'显示重叠时间线', def:true},
+},
+{
+  key:'summary', type:'concept', viz:'summary',
+  title:'回看整条阶梯：少即是多', en:'the whole climb',
+  lede:'8 步把朴素的 3532 GFLOPS 推到 25132（cuBLAS 的 83%）。但最反直觉的主线是：<b>占用率一路从 99% 跌到 24%，吞吐量却一路涨</b>——优化的本质是从「堆 warp 硬扛(TLP)」切换到「单线程塞满独立工作(ILP)」。',
+  terms:[
+    ['主线：ILP 取代 TLP','—','靠寄存器/共享分块抬高算术强度，把 cyc/issue 从 37.78 压到 4.96，用更少更密的 warp 吃满 SM。'],
+    ['天花板','—','FP32 在 CUDA core 上到 ~57% 峰值见顶。想再上一个数量级，必须换引擎 → Tensor Core（BF16 148 TFLOPS / FP8 296 TFLOPS）。'],
+  ],
+  goal:'把零散的招式收敛成一条主线，并指出下一台引擎在哪。',
+  change:'—', reason:'—',
+  effect:'naive 3532 → smem 5411 → 1D 9410 → 2D 15548 → float4 22790 → warp 23971 →(bank 略降 21519)→ 双缓冲 25132。',
+  bn:[['cyc/issue','37.78','4.96'],['占用率','99.8%','24.2%'],['vs cuBLAS','11.7%','83.0%']],
+  algo:[
+    [['cm','// 一句话主线']],
+    [['','naive  → 等 global（memory bound）']],
+    [['','+smem  → 复用，但 LDS 太多 → MIO 堵']],
+    [['','+寄存器分块 → 降 LDS:FMA，ILP 取代 TLP']],
+    [['','+float4 → 省寄存器 → 占用率↑']],
+    [['','+warp 分块 → 卸 L1/TEX 压力']],
+    [['','+双缓冲 → 预取重叠，藏加载延迟']],
+    [['hl','到顶：57% FP32 峰值 → 换 Tensor Core']],
+  ],
+  flow:'下一步：把计算从 CUDA core 换到 <b>Tensor Core</b>（WMMA → cp.async → WGMMA+TMA → FP8），用异步流水线把利用率从 17% 推到 80%+。详见仓库 docs/08–13。',
+  ctx:null,
+},
+];
+
+// ════════════════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════════════════
+let params = { seed:12345, speed:1.0 };
+const defaultParams = {...params};
+let cur = 0;          // current stage index
+let playing = true;
+let gt = 0;           // global animation clock
+let ctxOn = true;     // contextual toggle state
+const CW = 1000, CH = 600;
+const COL = { glob:[217,119,87], smem:[106,155,204], reg:[120,140,93], alu:[28,28,26],
+              red:[192,57,43], ok:[120,140,93], dim:[176,174,165], ink:[58,58,54], paper:[251,250,247] };
+
+// memory tiers (right column) — shared backbone for stages 1..5
+const T = {
+  alu:  {x:672,y:60,w:308,h:42, c:COL.alu,  nm:'ALU 计算单元 (FMA)', lat:'乘加 ≈1 周期'},
+  reg:  {x:672,y:126,w:308,h:54,c:COL.reg,  nm:'寄存器 Register',     lat:'≈1 周期 · 最快'},
+  smem: {x:672,y:228,w:308,h:80,c:COL.smem, nm:'共享内存 Shared',     lat:'≈20–30 周期 · 片上'},
+  glob: {x:672,y:372,w:308,h:160,c:COL.glob,nm:'全局内存 DRAM',       lat:'≈400+ 周期 · 最远最慢'},
+};
+const LANEX = 712; // vertical lane for packets
+
+// ════════════════════════════════════════════════════════════════════════
+//  p5 SETUP / DRAW
+// ════════════════════════════════════════════════════════════════════════
+function setup(){
+  const c = createCanvas(CW, CH);
+  c.parent('canvas-container');
+  const l = document.querySelector('.loading'); if(l) l.remove();
+  randomSeed(params.seed); noiseSeed(params.seed);
+  textFont('"Poppins","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif');
+  buildLadder(); selectStage(0);
+}
+function inc(){ return 0.0065 * params.speed; }
+function draw(){
+  if(playing) gt += inc();
+  background(COL.paper);
+  const s = STAGES[cur];
+  drawHeader(s);
+  const fn = VIZ[s.viz]; if(fn) fn();
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  DRAW HELPERS
+// ════════════════════════════════════════════════════════════════════════
+function ease(t){ t=constrain(t,0,1); return t<0.5 ? 2*t*t : 1-pow(-2*t+2,2)/2; }
+function tri(t){ t=t-floor(t); return t<0.5? t*2 : (1-t)*2; }
+function fc(c,a){ return color(c[0],c[1],c[2], a===undefined?255:a); }
+function rrect(x,y,w,h,r,fillC,strokeC,sw){
+  push();
+  if(fillC){noStroke();fill(fillC);} else noFill();
+  if(strokeC){stroke(strokeC);strokeWeight(sw||1.5);} else noStroke();
+  rect(x,y,w,h,r); pop();
+}
+function tlabel(txt,x,y,sz,c,al,style){
+  push(); fill(c||fc(COL.ink)); noStroke(); textSize(sz||13);
+  textAlign(al||LEFT, CENTER); if(style) textStyle(style); text(txt,x,y); pop();
+}
+function drawHeader(s){
+  push();
+  fill(fc(COL.ink)); noStroke(); textSize(20); textAlign(LEFT,TOP); textStyle(BOLD);
+  text(s.title, 24, 18);
+  textStyle(NORMAL); textSize(12); fill(fc(COL.dim));
+  text(s.en + (s.file? '   ·   '+s.file : ''), 24, 46);
+  if(s.type==='kernel'){
+    // gflops badge top-right of left zone
+    const bx=24, by=520;
+  }
+  pop();
+}
+function tierBox(t, active){
+  const dim = active===false;
+  rrect(t.x,t.y,t.w,t.h,10, fc(t.c, dim?26:38), fc(t.c, dim?70:230), 2);
+  tlabel(t.nm, t.x+14, t.y+ (t.h>60? 20:t.h/2), 13.5, fc(t.c, dim?120:255), LEFT, BOLD);
+  if(t.h>60) tlabel(t.lat, t.x+14, t.y+t.h-16, 11, fc(COL.dim));
+  else tlabel(t.lat, t.x+t.w-12, t.h>40?t.y+t.h/2:t.y+t.h/2, 10.5, fc(COL.dim), RIGHT);
+}
+function drawTiers(act){ // act: object of booleans
+  tierBox(T.alu, true);
+  tierBox(T.reg, act && act.reg);
+  tierBox(T.smem, act && act.smem);
+  tierBox(T.glob, true);
+  // section title
+  tlabel('内存层级（越下越慢越远）', T.glob.x, 542, 11.5, fc(COL.dim), LEFT);
+}
+function cy(t){ return t.y + (t.h>60?22:t.h/2); }
+function packet(x,y,r,c,glow){
+  push(); noStroke();
+  if(glow){ fill(c[0],c[1],c[2],55); circle(x,y,r*2.7); }
+  fill(c[0],c[1],c[2]); circle(x,y,r*2);
+  fill(255,255,255,160); circle(x-r*0.3,y-r*0.3,r*0.7);
+  pop();
+}
+function vlane(){ push(); stroke(0,0,0,18); strokeWeight(2); line(LANEX,cy(T.alu),LANEX,cy(T.glob)); pop(); }
+function arrow(x1,y1,x2,y2,c,w){
+  push(); stroke(c); strokeWeight(w||2.5); fill(c);
+  line(x1,y1,x2,y2);
+  const a=atan2(y2-y1,x2-x1); const s=6+ (w||2);
+  translate(x2,y2); rotate(a); noStroke(); triangle(0,0,-s,-s*0.5,-s,s*0.5); pop();
+}
+function meter(x,y,w,h,frac,c,label,val){
+  rrect(x,y,w,h,h/2, fc(COL.dim,60));
+  rrect(x,y,w*constrain(frac,0,1),h,h/2, fc(c));
+  if(label) tlabel(label,x,y-12,11.5,fc(COL.ink),LEFT);
+  if(val) tlabel(val,x+w,y-12,11.5,fc(c),RIGHT,BOLD);
+}
+// output C tile grid
+function cgrid(ox,oy,cols,rows,cell,fillCb){
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    const f = fillCb? fillCb(r,c):null;
+    rrect(ox+c*cell,oy+r*cell,cell-3,cell-3,3, f?fc(f[0],f[1]):fc(COL.dim,30), fc(COL.dim,90),1);
+  }
+}
+function jitter(i){ return (noise(i*0.37, gt*0.5)-0.5)*3.0; }
+
+// ════════════════════════════════════════════════════════════════════════
+//  VISUALIZATIONS (one per viz key)
+// ════════════════════════════════════════════════════════════════════════
+const VIZ = {};
+
+VIZ.intro = function(){
+  drawTiers({reg:true,smem:true});
+  vlane();
+  // one packet making the long climb glob -> smem -> reg -> alu, leg by leg
+  const legs=[[cy(T.glob),cy(T.smem),COL.glob],[cy(T.smem),cy(T.reg),COL.smem],[cy(T.reg),cy(T.alu),COL.reg]];
+  const P=2.2, lt=(gt*0.5)%P, idx=constrain(floor(lt/(P/3)),0,2);
+  const local=(lt-idx*(P/3))/(P/3);
+  const y=lerp(legs[idx][0],legs[idx][1],ease(local));
+  // faint full trail
+  for(let i=0;i<3;i++){ push(); stroke(legs[i][2][0],legs[i][2][1],legs[i][2][2],90); strokeWeight(3);
+    line(LANEX,legs[i][0],LANEX,legs[i][1]); pop(); }
+  packet(LANEX,y,9,legs[idx][2],true);
+  tlabel('一个数据从最远爬到计算单元，要穿过三层延迟', T.glob.x, 562, 11.5, fc(COL.dim));
+  // left: dot product idea
+  tlabel('矩阵乘法 GEMM：  C = α·A·B + β·C', 24, 96, 17, fc(COL.ink), LEFT, BOLD);
+  tlabel('C 的每个元素 = A 的一行 · B 的一列（点积，累加 K 次）', 24, 124, 13, fc(COL.ink));
+  // small A row, B col, C cell
+  const ox=40,oy=170,cell=34;
+  tlabel('A 的一行', ox, oy-16, 11.5, fc(COL.glob));
+  for(let k=0;k<8;k++) rrect(ox+k*cell,oy,cell-4,cell-4,4, fc(COL.glob,70), fc(COL.glob,160),1);
+  tlabel('B 的一列', ox, oy+60-16, 11.5, fc(COL.smem));
+  for(let k=0;k<8;k++) rrect(ox+k*cell,oy+60,cell-4,cell-4,4, fc(COL.smem,70), fc(COL.smem,160),1);
+  // moving multiply highlight
+  const kk=floor((gt*2)%8);
+  push(); noFill(); stroke(fc(COL.alu)); strokeWeight(2.5);
+  rect(ox+kk*cell,oy,cell-4,cell-4,4); rect(ox+kk*cell,oy+60,cell-4,cell-4,4); pop();
+  tlabel('↑ 第 '+(kk+1)+' 次：A[i]['+kk+'] × B['+kk+'][j]，累加进 C[i][j]', ox, oy+120, 12.5, fc(COL.ink));
+  rrect(ox+300,oy+18,cell+10,cell+10,6, fc(COL.alu,30), fc(COL.alu),2);
+  tlabel('C[i][j]', ox+300, oy+18+(cell+10)+14, 11.5, fc(COL.ink));
+  tlabel('优化的全部秘密：让数据待在近处 + 在等待时找事做', 24, 300, 14, fc(COL.glob), LEFT, BOLD);
+  tlabel('往右点开「优化阶梯」，看 8 步如何一步步逼近 cuBLAS。', 24, 326, 12.5, fc(COL.dim));
+};
+
+VIZ.naive = function(){
+  drawTiers({reg:false,smem:false}); vlane();
+  // packets crawl glob->alu directly (skipping reg/smem), many & slow
+  const N=7;
+  for(let i=0;i<N;i++){
+    const ph=(gt*0.35 + i/N)%1;
+    const y=lerp(cy(T.glob),cy(T.alu),ease(ph));
+    const x=LANEX + (i-N/2)*7 + jitter(i);
+    packet(x,y,6,COL.glob, i%2===0);
+  }
+  arrow(LANEX, cy(T.alu)+30, LANEX, cy(T.glob)-12, fc(COL.glob,120), 2);
+  tlabel('每个结果都直奔最远的 DRAM 取数', T.glob.x, 548, 11, fc(COL.glob));
+  tlabel('跳过了寄存器/共享：完全没有复用', T.reg.x, T.reg.y+T.reg.h/2, 11, fc(COL.dim), LEFT);
+  // left: C grid with neighbor threads re-reading same A-row
+  const ox=40,oy=92,cell=40;
+  const litRow = floor((gt*0.6)%4);
+  cgrid(ox,oy,4,4,cell,(r,c)=> r===0 ? [COL.alu,40] : null);
+  tlabel('C 的一个小块（每格 = 一个线程）',ox,oy-14,11.5,fc(COL.dim));
+  // A row to the left
+  tlabel('A 第 0 行',ox-2,oy+4*cell+18,11.5,fc(COL.glob));
+  for(let k=0;k<8;k++){
+    const redund = ctxOn && (floor((gt*3)%8)===k);
+    rrect(ox+k*(cell-6),oy+4*cell+26,cell-9,cell-9,4, fc(COL.glob, redund?180:70), fc(COL.glob,180),1);
+  }
+  if(ctxOn){
+    tlabel('⚠ 第 0 行被这一整排线程一遍遍重复读取（浪费）',ox,oy+4*cell+26+cell+6,12,fc(COL.red));
+    // arrows from 3 cells of row0 down to same A row
+    for(let c=0;c<3;c++) arrow(ox+c*cell+cell/2, oy+cell-6, ox+ (floor((gt*3)%8))*(cell-6)+(cell-9)/2, oy+4*cell+26, fc(COL.red,90),1.5);
+  }
+  // scheduler panel
+  schedPanel(40, 360, '16 个 warp 几乎同时卡在「等 global」', 0.998, 0.578, 'long_scoreboard', '13.95', 0.20, 13);
+  gfBadge();
+};
+
+VIZ.smem = function(){
+  drawTiers({reg:false,smem:true}); vlane();
+  const P=2.0, ph=(gt*0.5)%1;
+  // phase A (0..0.45): cooperative load glob->smem (several packets)
+  // phase B (0.45..1): compute smem->alu repeatedly + MIO queue
+  if(ph<0.45){
+    const lp=ph/0.45;
+    for(let i=0;i<5;i++){ const y=lerp(cy(T.glob),cy(T.smem),ease(constrain(lp*1.2 - i*0.05,0,1)));
+      packet(LANEX+(i-2)*12,y,6,COL.glob,false); }
+    tlabel('① 协作搬运：global → shared（搬一次）', T.smem.x, T.smem.y-12, 11.5, fc(COL.glob),LEFT,BOLD);
+  } else {
+    const lp=(ph-0.45)/0.55;
+    for(let i=0;i<4;i++){ const t=(lp*2.5 + i*0.25)%1; const y=lerp(cy(T.smem),cy(T.alu),ease(t));
+      packet(LANEX+(i-1.5)*9,y,5,COL.smem,false); }
+    tlabel('② 计算：每次 FMA 都要再发一条 LDS 去 shared 取', T.smem.x, T.smem.y-12, 11.5, fc(COL.smem),LEFT,BOLD);
+  }
+  // reuse note in smem box
+  tlabel('搬进来的数被一整排线程复用', T.smem.x+14, T.smem.y+T.smem.h-15, 11, fc(255,255,255,200));
+  // MIO queue (left zone, between the tile and the scheduler panel)
+  if(ctxOn){
+    const qx=40,qy=326,qw=560,qh=16;
+    tlabel('MIO 队列（LDS 在这里排队发射）', qx, qy-12, 11.5, fc(COL.red),LEFT,BOLD);
+    rrect(qx,qy,qw,qh,8, fc(COL.dim,50));
+    const fillN=11; // jammed
+    for(let i=0;i<fillN;i++){ rrect(qx+4+i*26, qy+3, 22, qh-6, 4, fc(COL.red, 200)); }
+    tlabel('队列堵死 → mio_throttle 21.74', qx+qw, qy-12, 11.5, fc(COL.red), RIGHT);
+  }
+  // left
+  const ox=40,oy=96,cell=18;
+  tlabel('共享内存里的一个 tile（32×32，搬一次给全员用）',ox,oy-14,11.5,fc(COL.dim));
+  for(let r=0;r<10;r++)for(let c=0;c<16;c++) rrect(ox+c*cell,oy+r*cell,cell-3,cell-3,2, fc(COL.smem,60),fc(COL.smem,120),1);
+  schedPanel(40, 360, '占用率仍顶满，但下一条几乎都是被 MIO 卡住的 LDS', 0.997, 0.635, 'mio_throttle', '21.74', 0.27, 13);
+  gfBadge();
+};
+
+VIZ.block1d = function(){
+  drawTiers({reg:true,smem:true}); vlane();
+  // load: smem->reg (1 value), then reg->alu x8 (reuse)
+  const ph=(gt*0.5)%1;
+  if(ph<0.25){ const lp=ph/0.25; const y=lerp(cy(T.smem),cy(T.reg),ease(lp));
+    packet(LANEX,y,7,COL.smem,true);
+    tlabel('① 取 1 个 B 值进寄存器', T.reg.x, T.reg.y-12, 11.5, fc(COL.smem),LEFT,BOLD);
+  } else { const lp=(ph-0.25)/0.75;
+    for(let i=0;i<8;i++){ const t=(lp*3 + i*0.12)%1; const y=lerp(cy(T.reg),cy(T.alu),ease(t));
+      packet(LANEX+(i-3.5)*6,y,4.5,COL.reg,false); }
+    tlabel('② 用它连喂 8 次乘加（复用！）', T.reg.x, T.reg.y-12, 11.5, fc(COL.reg),LEFT,BOLD);
+  }
+  // left: one thread owns a column of 8
+  const ox=60,oy=96,cell=30;
+  tlabel('一个线程负责 C 的一竖条 TM=8 个元素',ox,oy-14,11.5,fc(COL.dim));
+  const litI = floor((gt*4)%8);
+  for(let i=0;i<8;i++) rrect(ox,oy+i*cell,cell,cell-3,3, fc(COL.reg, i===litI && ph>=0.25?200:60), fc(COL.reg,160),1.5);
+  tlabel('B 值',ox+cell+40,oy+3*cell,12,fc(COL.smem),LEFT);
+  rrect(ox+cell+70,oy+3*cell-cell/2,cell,cell-3,3, fc(COL.smem,150),fc(COL.smem),1.5);
+  arrow(ox+cell+70, oy+3*cell, ox+cell+8, oy+litI*cell+cell/2, fc(COL.reg,160),2);
+  // ratio meter
+  ratioMeter(60, 430, '一次取数喂几次 FMA', 8, 8);
+  gfBadge();
+};
+
+VIZ.block2d = function(){
+  drawTiers({reg:true,smem:true}); vlane();
+  const ph=(gt*0.5)%1;
+  if(ph<0.3){ const lp=ph/0.3;
+    for(let i=0;i<12;i++){ const y=lerp(cy(T.smem),cy(T.reg),ease(constrain(lp*1.4-i*0.03,0,1)));
+      packet(LANEX+(i-6)*7,y,5,COL.smem,false); }
+    tlabel('① 取 8 个 A + 4 个 B 进寄存器（共 12 次）', T.reg.x, T.reg.y-12, 11.5, fc(COL.smem),LEFT,BOLD);
+  } else { const lp=(ph-0.3)/0.7;
+    for(let i=0;i<10;i++){ const t=(lp*3 + i*0.1)%1; const y=lerp(cy(T.reg),cy(T.alu),ease(t));
+      packet(LANEX+(i-5)*7,y,4.5,COL.reg,false); }
+    tlabel('② 外积：12 次取数 → 32 次独立乘加', T.reg.x, T.reg.y-12, 11.5, fc(COL.reg),LEFT,BOLD);
+  }
+  // left: 8x4 outer product grid lighting up
+  const ox=60,oy=96,cell=30, COLS=4,ROWS=8;
+  tlabel('一个线程负责 8×4=32 个 C（外积）',ox,oy-14,11.5,fc(COL.dim));
+  // regA column (left), regB row (top)
+  for(let i=0;i<ROWS;i++) rrect(ox-cell-6,oy+i*cell,cell-4,cell-4,3, fc(COL.reg,150),fc(COL.reg),1);
+  for(let j=0;j<COLS;j++) rrect(ox+j*cell,oy-cell-6,cell-4,cell-4,3, fc(COL.smem,150),fc(COL.smem),1);
+  const prog = ph<0.3?0: ((ph-0.3)/0.7);
+  const lit = floor(prog*ROWS*COLS);
+  for(let i=0;i<ROWS;i++)for(let j=0;j<COLS;j++){ const k=i*COLS+j;
+    rrect(ox+j*cell,oy+i*cell,cell-4,cell-4,3, fc(COL.alu, k<lit?70:14), fc(COL.dim,90),1);
+  }
+  // ILP pipeline (ctx)
+  if(ctxOn){
+    const px=60,py=430; tlabel('ILP：32 个独立乘加排成长队，自动填满流水线空窗',px,py-14,12,fc(COL.reg),LEFT,BOLD);
+    rrect(px,py,540,26,8,fc(COL.dim,40));
+    for(let i=0;i<18;i++){ const t=(gt*1.2 + i*0.06)%1; rrect(px+ t*510, py+4, 16,18,3, fc(COL.reg,220)); }
+    tlabel('对比 smem 时：流水线总在等 LDS（红色空窗）→ 现在被独立 FMA 填满',px,py+40,11.5,fc(COL.dim));
+  }
+  // mini compare occupancy vs idle (placed right of the grid, clear of the tiers)
+  cmpBars(300, 110);
+  gfBadge();
+};
+
+VIZ.vectorized = function(){
+  drawTiers({reg:true,smem:true}); vlane();
+  // left: 4 thin arrows -> 1 fat arrow
+  const ox=60,oy=110;
+  tlabel('float4：把 4 条细指令合成 1 条粗指令',ox,oy-30,14,fc(COL.ink),LEFT,BOLD);
+  tlabel('LD.32 × 4（旧）',ox,oy-2,12,fc(COL.dim));
+  for(let i=0;i<4;i++){ const t=(gt*1.5 + i*0.1)%1; arrow(ox+90, oy+ i*14, ox+90+ t*150, oy+i*14, fc(COL.dim,120),2); }
+  tlabel('LD.128 × 1（float4）',ox,oy+86,12,fc(COL.smem),LEFT,BOLD);
+  const t2=(gt*1.5)%1; arrow(ox+120, oy+108, ox+120+ t2*150, oy+108, fc(COL.smem,230),9);
+  // register packing: 96 -> 63 slots, more warps
+  const rx=60,ry=270; tlabel('寄存器打得更紧：96 → 63 / 线程',rx,ry-14,12.5,fc(COL.reg),LEFT,BOLD);
+  drawRegPack(rx,ry,96,fc(COL.dim,80)); tlabel('96(旧)',rx,ry+70,11,fc(COL.dim));
+  drawRegPack(rx+300,ry,63,fc(COL.reg,200)); tlabel('63(float4)',rx+300,ry+70,11,fc(COL.reg));
+  // more warps
+  const wx=60,wy=380; tlabel('寄存器省下来 → 每个 SM 能塞更多 warp → 占用率 30%→48%',wx,wy-12,12,fc(COL.ink),LEFT,BOLD);
+  const nW = 4 + floor(tri(gt*0.3)*4);
+  for(let i=0;i<8;i++){ const on = i< (gt%2<1?4:8); rrect(wx+i*40, wy, 34,24,5, on?fc(COL.smem,180):fc(COL.dim,40), fc(COL.smem,120),1); }
+  tlabel('counterintuitive：float4 的红利不是省带宽，是省寄存器',wx,wy+44,12,fc(COL.glob));
+  // packets fat
+  const ph=(gt*0.6)%1; const y=lerp(cy(T.glob),cy(T.reg),ease(ph));
+  packet(LANEX,y,9,COL.glob,true); tlabel('粗箭头 = 一次搬 4 个 float',T.smem.x,560,11,fc(COL.dim));
+  gfBadge();
+};
+
+VIZ.warptile = function(){
+  drawTiers({reg:true,smem:true});
+  // left: a warp = 32 lanes (8x4) owning a C region, sharing regA/regB
+  const ox=50,oy=100,cell=30,COLS=8,ROWS=4;
+  tlabel('一个 warp = 32 个 lane，协同负责一块 C 区域',ox,oy-14,12.5,fc(COL.ink),LEFT,BOLD);
+  for(let i=0;i<ROWS;i++)for(let j=0;j<COLS;j++){
+    const k=i*COLS+j; const pulse= (floor((gt*8))%32)===k;
+    rrect(ox+j*cell,oy+i*cell,cell-4,cell-4,3, fc(COL.smem, pulse?200:55), fc(COL.smem,130),1);
+    tlabel(k, ox+j*cell+(cell-4)/2, oy+i*cell+(cell-4)/2, 9, fc(COL.ink,130), CENTER);
+  }
+  tlabel('lane 之间共享从 shared 取来的 regA/regB（广播）→ 每线程访存次数↓',ox,oy+ROWS*cell+14,11.5,fc(COL.reg));
+  // L1/TEX pressure meter dropping
+  meter(ox,oy+ROWS*cell+50,300,16, 0.675, COL.reg, 'L1/TEX 管线压力（被 warp 级复用卸下来）','89.8% → 67.5%');
+  // scalar vs float4 compare (ctx off shows scalar pitfall)
+  const bx=ox,by=300;
+  tlabel('为什么必须配 float4？看反例（标量版 warp tile）',bx,by-2,12.5,fc(COL.red),LEFT,BOLD);
+  twinBar(bx,by+14,'寄存器/线程', 211,105, 256, '标量 211','float4 105');
+  twinBar(bx,by+70,'占用率', 12.5,24.1, 30, '标量 12.5%','float4 24.1%');
+  twinBar(bx,by+126,'GFLOPS', 12843,23971, 26000, '标量 12843(慢!)','float4 23971(快)');
+  if(!ctxOn) tlabel('⚠ 标量 warp tile 在 H20 上是负优化：寄存器爆炸→占用崩盘→比不分 warp 还慢',bx,by+186,11.5,fc(COL.red));
+  else tlabel('✓ float4 把寄存器压回一半，占用翻倍 → warp tile 才赢',bx,by+186,11.5,fc(COL.reg));
+  // theme (placed lower-center, right of the gfBadge, clear of the tiers)
+  tlabel('占用率仅 24%，却是最快的手写 kernel',340,545,12.5,fc(COL.glob),LEFT,BOLD);
+  tlabel('—— 低占用 + 高 ILP > 高占用',340,567,12,fc(COL.glob),LEFT);
+  // packets
+  const ph=(gt*0.6)%1,y=lerp(cy(T.smem),cy(T.reg),ease(ph)); packet(LANEX,y,7,COL.smem,true);
+  gfBadge();
+};
+
+VIZ.bank = function(){
+  // 32 banks visualization
+  const padded = ctxOn;
+  const ox=40,oy=110, bw=18, bh=200, n=32;
+  tlabel('共享内存的 32 个 bank（同一拍，32 个 lane 各打不同 bank 才能一拍完成）',ox,oy-26,13,fc(COL.ink),LEFT,BOLD);
+  // bank columns
+  for(let b=0;b<n;b++){ rrect(ox+b*bw, oy, bw-3, bh, 3, fc(COL.dim,22), fc(COL.dim,60),1);
+    if(b%4===0) tlabel(b, ox+b*bw+(bw-3)/2, oy+bh+12, 9, fc(COL.dim), CENTER); }
+  // lane targets
+  for(let lane=0; lane<32; lane++){
+    let bank;
+    if(padded) bank = lane;                 // +4 padding => 32 distinct banks
+    else bank = (lane*4)%32;                // 8-way conflict pattern (groups of 4 collapse)
+    const conflictGroup = padded? 0 : (lane%8);
+    const x = ox + bank*bw + (bw-3)/2;
+    const y = oy + 26 + (padded? 0 : conflictGroup*20);  // stack collisions to show pile-up
+    const c = padded? COL.ok : COL.red;
+    const t=(gt*1.4)%1; const yy = lerp(oy-44, y, ease(t));
+    packet(x + (padded?0:(lane>=16?2:-2)), yy, 6, c, false);
+  }
+  if(padded){
+    tlabel('✓ +4 padding：32 个 lane 铺满 32 个 bank → 一拍完成（无冲突）',ox,oy+bh+34,12.5,fc(COL.ok),LEFT,BOLD);
+  } else {
+    tlabel('✗ 无 padding：每 4 个 lane 撞进同一 bank → 8-way 冲突，硬件拆成 8 拍',ox,oy+bh+34,12.5,fc(COL.red),LEFT,BOLD);
+  }
+  // the twist: duration not improved
+  const tx=40,ty=380;
+  tlabel('关键一课：指标变好 ≠ 变快',tx,ty,14,fc(COL.glob),LEFT,BOLD);
+  twinBar(tx,ty+18,'写 bank 冲突', 21938185, 5632486, 22000000, '2190 万', '560 万(↓4×)');
+  twinBar(tx,ty+74,'Duration (ms)', 6.18, 6.89, 8, '6.18', '6.89 (反而↑!)');
+  tlabel('冲突砍了 4×，速度却没涨——它根本不在关键依赖链上。',tx,ty+128,12,fc(COL.ink));
+  tlabel('判据：看消除后 Duration 降不降，而不是看 ncu 计数有多吓人。',tx,ty+150,12,fc(COL.ink));
+  // banks legend on right
+  drawTiers({reg:true,smem:true});
+  const ph=(gt*0.6)%1,y=lerp(cy(T.smem),cy(T.reg),ease(ph)); packet(LANEX,y,6,COL.smem,false);
+  gfBadge();
+};
+
+VIZ.double = function(){
+  // two shared buffers ping-pong + overlap timeline
+  const ox=50,oy=104,bw=150,bh=80;
+  tlabel('两块共享缓冲乒乓切换：算一块的同时，预取下一块',ox,oy-14,13,fc(COL.ink),LEFT,BOLD);
+  const beat = floor(gt*0.8)%2; // which buffer is "compute"
+  for(let b=0;b<2;b++){
+    const computing = (b===beat);
+    rrect(ox+b*(bw+40),oy,bw,bh,8, fc(computing?COL.alu:COL.smem, computing?40:30), fc(computing?COL.alu:COL.smem,220),2);
+    tlabel('buf['+b+']',ox+b*(bw+40)+12,oy+18,12.5,fc(computing?COL.alu:COL.smem),LEFT,BOLD);
+    tlabel(computing?'← ALU 正在计算':'← 正在预取下一块',ox+b*(bw+40)+12,oy+44,11.5,fc(COL.dim));
+    // little packets
+    if(!computing){ const t=(gt*2)%1; packet(ox+b*(bw+40)+bw/2, oy+bh+ (1-t)*40, 6, COL.glob,false); }
+  }
+  // overlap timeline
+  const tx=50,ty=240,tw=620;
+  tlabel('时间线：加载 与 计算 在同一段时间并行（不同硬件单元）',tx,ty-14,12.5,fc(COL.reg),LEFT,BOLD);
+  const rows=[['加载下一块 (访存单元)',COL.glob],['计算当前块 (ALU)',COL.alu]];
+  for(let r=0;r<2;r++){ tlabel(rows[r][0],tx,ty+8+r*40,11.5,fc(rows[r][1]),LEFT);
+    for(let i=0;i<5;i++){ const x=tx+170+i*90; const off=r*45;
+      rrect(x+ (r? -off:0), ty+r*40, 80, 24, 4, fc(rows[r][1], (i%5)? 150:150)); } }
+  // bracket showing overlap
+  push(); stroke(fc(COL.reg)); strokeWeight(2);
+  line(tx+170+45, ty+70, tx+170+80, ty+70); pop();
+  tlabel('↑ 错开半拍 → 漫长的加载被计算盖住，流水线几乎不空转',tx,ty+92,11.5,fc(COL.reg));
+  // result badges
+  const sx=50,sy=380;
+  tlabel('登顶（手写 CUDA core 最快）',sx,sy,14,fc(COL.glob),LEFT,BOLD);
+  meter(sx,sy+26,560,20, 25132/CUBLAS, COL.glob, 'GFLOPS（占 cuBLAS 83%）','25132');
+  meter(sx,sy+70,560,16, 1-4.96/37.78, COL.reg, 'cyc/issue 越低越好（全场最低）','4.96');
+  meter(sx,sy+110,560,16, 0.7556, COL.smem, 'Compute(SM) 利用率（手写最高）','75.6%');
+  tlabel('占用率仍只有 24% —— 再次印证：靠 ILP + 预取，而非堆 warp。',sx,sy+140,12,fc(COL.ink));
+  drawTiers({reg:true,smem:true});
+  gfBadge();
+};
+
+VIZ.summary = function(){
+  // big climbing bar chart of all kernel stages (fits left+center; badge on the right)
+  const ks = STAGES.filter(s=>s.type==='kernel');
+  const ox=58,oy=110,bw=66,gap=14, base=430, maxH=270, span=ks.length*(bw+gap);
+  tlabel('完整阶梯 @4096³（柱高 = GFLOPS，虚线 = cuBLAS 30266）',ox,oy-16,13,fc(COL.ink),LEFT,BOLD);
+  // cublas line
+  const cubY = base - maxH;
+  push(); stroke(fc(COL.dim)); strokeWeight(1.5); drawingContext.setLineDash([6,5]);
+  line(ox-10, cubY, ox+span-6, cubY); drawingContext.setLineDash([]); pop();
+  tlabel('cuBLAS 30266',ox+span-96, cubY-10, 11, fc(COL.dim),LEFT);
+  ks.forEach((s,i)=>{
+    const x=ox+i*(bw+gap);
+    const target=(s.gflops/CUBLAS)*maxH;
+    const grow=constrain(gt*0.6 - i*0.12, 0, 1);
+    const h=target*ease(grow);
+    const isPeak = s.gflops===25132, isDip = s.gflops===21519;
+    const c = isPeak? COL.glob : isDip? COL.red : COL.smem;
+    rrect(x, base-h, bw, h, 5, fc(c, 220), null);
+    tlabel(s.gflops, x+bw/2, base-h-12, 11, fc(c), CENTER, BOLD);
+    push(); translate(x+bw/2, base+10); rotate(-PI/7);
+    tlabel(s.title.split('：')[0], 0,0, 10.5, fc(COL.ink), RIGHT); pop();
+  });
+  // inverse curve: occupancy down while gflops up
+  const cx=58,cy2=486;
+  tlabel('反向主线：占用率↓（红）  vs  吞吐量↑（绿）—— ILP 取代 TLP',cx,cy2,12.5,fc(COL.glob),LEFT,BOLD);
+  const occ=[99.8,99.7,48.7,30.3,48.1,24.1,22.0,24.2], gf=[3532,5411,9410,15548,22790,23971,21519,25132];
+  const gw=span-20, x0=cx, y0=cy2+16, gh=58;
+  push(); strokeWeight(2.5);
+  for(let i=0;i<occ.length-1;i++){
+    const xa=x0+ i*(gw/7), xb=x0+(i+1)*(gw/7);
+    stroke(fc(COL.red,210));  line(xa, y0+(1-occ[i]/100)*gh, xb, y0+(1-occ[i+1]/100)*gh);
+    stroke(fc(COL.reg,210));  line(xa, y0+(1-gf[i]/26000)*gh, xb, y0+(1-gf[i+1]/26000)*gh);
+  } pop();
+  tlabel('占用率 99.8% → 24.2%',x0,y0+gh+14,10.5,fc(COL.red),LEFT);
+  tlabel('吞吐 3532 → 25132 GFLOPS',x0+200,y0+gh+14,10.5,fc(COL.reg),LEFT);
+  // right: next-engine badge
+  const px=720,py=120,pw=258,ph=210;
+  rrect(px,py,pw,ph,12, fc(COL.reg,24), fc(COL.reg,180),2);
+  tlabel('FP32 在 CUDA core 到顶',px+16,py+22,12,fc(COL.ink),LEFT,BOLD);
+  tlabel('≈ 57% FP32 峰值 = cuBLAS 83%',px+16,py+44,11,fc(COL.dim),LEFT);
+  push(); stroke(fc(COL.reg)); strokeWeight(2); drawingContext.setLineDash([5,4]);
+  line(px+16,py+62,px+pw-16,py+62); drawingContext.setLineDash([]); pop();
+  push(); fill(fc(COL.glob)); noStroke(); textSize(13); textStyle(BOLD); textAlign(LEFT,CENTER);
+  text('下一台引擎 →', px+16, py+86); pop();
+  tlabel('Tensor Core',px+16,py+114,18,fc(COL.reg,255),LEFT,BOLD);
+  tlabel('BF16 148 TFLOPS',px+16,py+142,12,fc(COL.smem),LEFT);
+  tlabel('FP8  296 TFLOPS',px+16,py+162,12,fc(COL.glob),LEFT);
+  tlabel('WMMA→WGMMA+TMA→FP8',px+16,py+186,10.5,fc(COL.dim),LEFT);
+  // a few rising packets for life
+  for(let i=0;i<3;i++){ const t=(gt*0.5+i/3)%1; packet(px+pw-40, py+ph-20-(ph-40)*t, 6, [COL.reg,COL.smem,COL.glob][i], true); }
+};
+
+// ---- shared mini-widgets ----
+function schedPanel(x,y,caption,occ,idle,stallName,stallVal,thru,nRed){
+  rrect(x,y,580,170,12, fc(255,255,255,0), fc(COL.dim,80),1.5);
+  tlabel('调度器视角',x+16,y+18,12.5,fc(COL.ink),LEFT,BOLD);
+  tlabel(caption,x+16,y+38,11.5,fc(COL.dim));
+  // 16 warp dots
+  for(let i=0;i<16;i++){ const waiting=i<nRed; const wx=x+16+(i%8)*30, wy=y+58+floor(i/8)*26;
+    push(); noStroke(); fill(waiting? fc(COL.red, 180+floor(tri(gt+ i*0.1)*60)) : fc(COL.reg,200)); circle(wx,wy,18);
+    if(waiting){ fill(255); textSize(8); textAlign(CENTER,CENTER); text('等',wx,wy); } pop(); }
+  tlabel('● 等待  ● 可发射', x+16, y+118, 11, fc(COL.dim));
+  meter(x+300,y+62,260,14, occ, COL.smem, '占用率 occupancy', (occ*100).toFixed(1)+'%');
+  meter(x+300,y+98,260,14, idle, COL.red, '调度器空转 No-Eligible', (idle*100).toFixed(1)+'%');
+  meter(x+300,y+134,260,14, thru, COL.glob, '相对吞吐', '低');
+  tlabel('头号 stall：'+stallName+' '+stallVal, x+16, y+140, 12, fc(COL.red),LEFT,BOLD);
+}
+function ratioMeter(x,y,label,ldsToFma,maxF){
+  tlabel(label,x,y-14,12.5,fc(COL.ink),LEFT,BOLD);
+  tlabel('smem 时：1 取 → 1 算',x,y+6,12,fc(COL.dim));
+  rrect(x+170,y-2,16,16,3,fc(COL.smem,160)); tlabel('×1',x+192,y+6,12,fc(COL.dim),LEFT);
+  tlabel('现在：1 取 → '+ldsToFma+' 算',x,y+34,12,fc(COL.reg),LEFT,BOLD);
+  for(let i=0;i<ldsToFma;i++) rrect(x+170+i*22,y+26,16,16,3,fc(COL.reg,200));
+  tlabel('算术强度 ×'+ldsToFma+' → MIO 拥塞缓解，cyc/issue 大降',x,y+58,11.5,fc(COL.dim));
+}
+function cmpBars(x,y){
+  tlabel('占用率↓ 但空转也↓',x,y-2,12,fc(COL.ink),LEFT,BOLD);
+  twinBar(x,y+14,'占用率', 99.7,30.3,100,'smem 99.7%','2D 30.3%');
+  twinBar(x,y+70,'调度器空转', 63.5,40.6,100,'smem 63.5%','2D 40.6%(更低!)');
+  tlabel('warp 变少，空转反而更少',x,y+126,11.5,fc(COL.reg));
+}
+function twinBar(x,y,label,a,b,mx,la,lb){
+  tlabel(label,x,y,11.5,fc(COL.ink),LEFT);
+  rrect(x,y+14,256,12,6,fc(COL.dim,50)); rrect(x,y+14,256*constrain(a/mx,0,1),12,6,fc(COL.dim,160));
+  tlabel(la,x+260,y+20,10.5,fc(COL.dim),LEFT);
+  rrect(x,y+30,256,12,6,fc(COL.dim,50)); rrect(x,y+30,256*constrain(b/mx,0,1),12,6,fc(COL.ok,200));
+  tlabel(lb,x+260,y+36,10.5,fc(COL.ok),LEFT);
+}
+function drawRegPack(x,y,n,c){
+  const cols=16, cell=8; for(let i=0;i<n;i++){ rrect(x+(i%cols)*cell, y+floor(i/cols)*cell, cell-2,cell-2,1, c); }
+}
+function gfBadge(){
+  const s=STAGES[cur]; if(s.type!=='kernel') return;
+  const x=24,y=520,w=300,h=58;
+  rrect(x,y,w,h,10, fc(COL.glob,28), fc(COL.glob,180),2);
+  tlabel('实测吞吐 @4096³',x+14,y+16,11,fc(COL.dim),LEFT);
+  push(); fill(fc(COL.glob)); noStroke(); textSize(26); textStyle(BOLD); textAlign(LEFT,CENTER);
+  text(s.gflops, x+14, y+38); textSize(13); textStyle(NORMAL); text(' GFLOPS', x+14+textWidth(''+s.gflops)+8, y+40); pop();
+  tlabel('占 cuBLAS '+s.pct+'%',x+w-14,y+16,12,fc(COL.glob),RIGHT,BOLD);
+  tlabel('占用率 '+s.occ+' · cyc/issue '+s.cyc,x+w-14,y+40,11,fc(COL.dim),RIGHT);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  EXPLANATION PANEL (HTML)
+// ════════════════════════════════════════════════════════════════════════
+function renderPanel(i){
+  const s=STAGES[i]; const E=document.getElementById('explain');
+  let h='';
+  h+=`<div class="etitle">${s.title} <span class="en">${s.en}${s.file?' · '+s.file:''}</span></div>`;
+  h+=`<div class="elede">${s.lede}</div>`;
+  if(s.type==='kernel'){
+    const peakPct=((s.gflops/PEAK)*100).toFixed(0);
+    h+=`<div class="metrics-strip">
+      <div class="mstat"><div class="k">实测吞吐 @4096³</div><div class="v">${s.gflops}</div><div class="sub">GFLOPS</div></div>
+      <div class="mstat blue"><div class="k">占 cuBLAS SGEMM</div><div class="v">${s.pct}%</div><div class="sub">基线 30266 · ≈${peakPct}% FP32峰值</div></div>
+      <div class="mstat green"><div class="k">占用率 occupancy</div><div class="v">${s.occ}</div><div class="sub">活跃 warp / 上限</div></div>
+      <div class="mstat gray"><div class="k">warp cyc/issue</div><div class="v">${s.cyc}</div><div class="sub">每发一条指令熬的周期</div></div>
+    </div>`;
+  }
+  // background & terms
+  if(s.terms&&s.terms.length){
+    h+=`<div class="section-h">背景 &amp; 必要名词（先认识，再上手）</div><div class="terms">`;
+    s.terms.forEach(t=> h+=`<div class="term"><b>${t[0]}</b><span class="en">${t[1]}</span> &nbsp;${t[2]}</div>`);
+    h+=`</div>`;
+  }
+  // goal/change/reason/effect cards (only for kernel stages)
+  if(s.type==='kernel'){
+    h+=`<div class="grid2">
+      <div class="card goal"><h4>🎯 直观目标</h4><p>${s.goal}</p></div>
+      <div class="card change"><h4>🔧 优化点（改了什么）</h4><p>${s.change}</p></div>
+      <div class="card reason"><h4>💡 为什么有效</h4><p>${s.reason}</p></div>
+      <div class="card effect"><h4>📈 最终效果</h4><p>${s.effect}</p>${bnHTML(s.bn)}</div>
+    </div>`;
+  } else if(s.bn){
+    h+=`<div class="grid2"><div class="card effect"><h4>📈 一图看尽</h4><p>${s.effect}</p>${bnHTML(s.bn)}</div>
+        <div class="card goal"><h4>🎯 目标</h4><p>${s.goal}</p></div></div>`;
+  }
+  // algorithm / dataflow
+  h+=`<div class="section-h">算法 / 数据流 / 逻辑调用</div>`;
+  h+=`<pre class="algo">${algoHTML(s.algo)}</pre>`;
+  if(s.launch) h+=`<div class="flowline"><b>启动配置</b>：<code>${s.launch}</code></div>`;
+  h+=`<div class="flowline">${s.flow}</div>`;
+  // callout for special lessons
+  if(s.key==='bank') h+=`<div class="callout"><b>核心判断力：</b>一个瓶颈值不值得打，看的是「消除它之后 Duration / Elapsed Cycles 降不降」，而不是它在 ncu 上的 throughput% 或绝对计数有多吓人。bank conflict 在 H20 这张「带宽厚、片上余量大」的卡上就是个非关键路径瓶颈——负结果，但价值极高。</div>`;
+  if(s.key==='block2d') h+=`<div class="callout"><b>范式转折：</b>从这一步起，「占用率低」不再是坏事。优化主线从「堆 warp 数量(TLP)」切换到「单线程内塞满独立指令(ILP)」——这是看懂后面每一步的钥匙。</div>`;
+  if(s.key==='summary') h+=`<div class="callout"><b>想继续往上？</b>换引擎到 Tensor Core：朴素 WMMA(11%) → smem 复用(20%) → cp.async 流水线(26%) → WGMMA+TMA+warp specialization(80%+) → FP8(75% /296T)。机理也变了——不再靠高占用率，而是靠<b>异步多级流水线</b>藏延迟。详见仓库 <code>docs/08–13</code>。</div>`;
+  // nav
+  h+=`<div class="navfoot">
+     <button class="button ghost" onclick="gotoStage(${Math.max(0,i-1)})" ${i===0?'disabled style=opacity:.4':''}>← 上一阶段</button>
+     <button class="button" onclick="gotoStage(${Math.min(STAGES.length-1,i+1)})" ${i===STAGES.length-1?'disabled style=opacity:.4':''}>下一阶段 →</button>
+     </div>`;
+  E.innerHTML=h;
+}
+function bnHTML(bn){ if(!bn) return ''; let h='<div style="margin-top:10px">';
+  bn.forEach(b=> h+=`<span class="bn">${b[0]} <span class="was">${b[1]}</span><span class="arr">→</span><span class="now">${b[2]}</span></span>`);
+  return h+'</div>'; }
+function algoHTML(lines){ if(!lines) return '';
+  // lines: array of lines; each line is an array of [class, text] tokens. One \n per line.
+  return lines.map(line => line.map(tok=>{ const cls=tok[0], txt=esc(tok[1]);
+    return cls ? `<span class="${cls}">${txt}</span>` : txt; }).join('')).join('\n'); }
+function esc(t){ return (''+t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ════════════════════════════════════════════════════════════════════════
+//  LADDER NAV (sidebar)
+// ════════════════════════════════════════════════════════════════════════
+function buildLadder(){
+  const L=document.getElementById('ladder'); let h='';
+  STAGES.forEach((s,i)=>{
+    const isK=s.type==='kernel';
+    const w= isK? Math.round((s.gflops/CUBLAS)*100):0;
+    h+=`<button class="rung ${isK?'':'concept'}" id="rung${i}" onclick="gotoStage(${i})">
+      <span class="num">${isK? (s.file? s.file.match(/^\d+/)? parseInt(s.file):i : i):'·'}</span>
+      <span class="body"><span class="nm">${s.title}</span>
+      ${isK?`<span class="barwrap"><span class="bar" style="width:${w}%"></span></span>`:''}</span>
+      ${isK?`<span class="gf">${s.gflops}</span>`:''}
+    </button>`;
+  });
+  L.innerHTML=h;
+}
+function selectStage(i){
+  cur=i; gt=0;
+  document.querySelectorAll('.rung').forEach((r,idx)=> r.classList.toggle('active', idx===i));
+  // contextual toggle
+  const s=STAGES[i]; const sec=document.getElementById('ctxSection');
+  if(s.ctx){ sec.style.display=''; document.getElementById('ctxLabel').textContent=s.ctx.label;
+    ctxOn=s.ctx.def; document.getElementById('ctx').checked=ctxOn; }
+  else { sec.style.display='none'; }
+  renderPanel(i);
+}
+function gotoStage(i){ selectStage(i); window.scrollTo({top:0,behavior:'smooth'}); }
+
+// ════════════════════════════════════════════════════════════════════════
+//  UI HANDLERS
+// ════════════════════════════════════════════════════════════════════════
+function togglePlay(){ playing=!playing; document.getElementById('playBtn').textContent= playing?'⏸ 暂停':'▶ 播放'; }
+function stepFrame(){ playing=false; document.getElementById('playBtn').textContent='▶ 播放'; gt+=0.12; redraw(); }
+function toggleCtx(v){ ctxOn=v; }
+function updateParam(name,val){ params[name]=parseFloat(val);
+  if(name==='speed') document.getElementById('speed-value').textContent=parseFloat(val).toFixed(1)+'×'; }
+function updateSeedDisplay(){ document.getElementById('seed-input').value=params.seed; }
+function updateSeed(){ const v=parseInt(document.getElementById('seed-input').value);
+  if(v&&v>0){ params.seed=v; randomSeed(v); noiseSeed(v);} else updateSeedDisplay(); }
+function previousSeed(){ params.seed=Math.max(1,params.seed-1); updateSeedDisplay(); randomSeed(params.seed); noiseSeed(params.seed); }
+function nextSeed(){ params.seed+=1; updateSeedDisplay(); randomSeed(params.seed); noiseSeed(params.seed); }
+function randomSeedAndUpdate(){ params.seed=Math.floor(Math.random()*999999)+1; updateSeedDisplay(); randomSeed(params.seed); noiseSeed(params.seed); }
+function resetAll(){ params={...defaultParams};
+  document.getElementById('speed').value=params.speed; document.getElementById('speed-value').textContent=params.speed.toFixed(1)+'×';
+  updateSeedDisplay(); randomSeed(params.seed); noiseSeed(params.seed);
+  playing=true; document.getElementById('playBtn').textContent='⏸ 暂停';
+  selectStage(0); }
+function downloadPNG(){ saveCanvas('cuda_'+STAGES[cur].key,'png'); }
+
+window.addEventListener('load', ()=>{ updateSeedDisplay(); });
+</script>
+</body>
+</html>
