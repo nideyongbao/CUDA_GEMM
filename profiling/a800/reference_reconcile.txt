@@ -10,3 +10,16 @@ Shape              参考表(TFLOPS/MFU)   A800默认时钟        A800锁频141
 
 结论: 默认时钟与参考表逐 shape 一致(5/6 误差<=3%); 锁频是额定满频上限(高10-20%).
 时钟实测(dmon, 8192^3 BF16): 锁频全程1410MHz; 默认仅1140-1290MHz(单次nvidia-smi抓到的1410是瞬时峰值).
+
+================================================================
+时钟 A/B (8192^3 cuBLAS BF16, dmon 同步采样) —— 确认"94% vs 78.7%"纯属时钟:
+  锁频1410:  293.6T  活跃SM=1410MHz  该频有效峰312T   按实际频效率=94.1%  (vs312T=94.1%)
+  默认解锁:  237.6T  活跃SM=~1140MHz 该频有效峰252T   按实际频效率=~94%   (vs312T=76.2%)
+  => cuBLAS 两种情况效率都~94%; 78.7%(参考)/76.2%(默认) = 94%效率 × ~84%时钟比.
+
+A800 cuBLAS 实际 kernel (ncu 抓取) —— 证明硬件路径=Ampere mma.sync, 手写阶梯缺这级:
+  BF16: ampere_s16816gemm_bf16_256x128_ldg8_stages_32x3_nn
+        (s16816 = mma.sync.m16n8k16; ldg8 = 128bit load; stages_32x3 = 3级cp.async流水线)
+  FP32: ampere_sgemm_128x64_nn
+  手写阶梯用 WMMA C++ API(load_matrix_sync/mma_sync), 直接跳到 Hopper WGMMA(tc_04),
+  跳过了 Ampere 原生 mma.sync+ldmatrix 这级 => A800 上手写卡在 WMMA 的 L1/TEX 瓶颈(13.8%).
