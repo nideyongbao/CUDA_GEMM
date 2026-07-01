@@ -1,1 +1,0 @@
-[tc_03 WMMA_pipe] M=4096 N=4096 K=4096  time=3.1949 ms  GFLOPS=43018.50  util(vs148T)=29.1%

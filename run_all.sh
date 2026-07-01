@@ -8,6 +8,7 @@
 # 用法：
 #   bash run_all.sh                 # 默认：自动检测架构，开箱默认时钟，全量测试
 #   bash run_all.sh --lock          # 额外锁频到额定 boost（需 sudo，测可复现的满频上限）
+#   bash run_all.sh --both          # 一次跑【默认+锁频】两轮并出对比（归档基线标准；锁频步需 sudo）
 #   bash run_all.sh --gpu 1         # 指定用哪张 GPU（默认 0）
 #   bash run_all.sh --quick         # 快速版（跳过尺寸缩放/autotune）
 #   bash run_all.sh --ncu           # 额外跑 Nsight Compute 剖析（需 root，很慢）
@@ -36,23 +37,41 @@ cd "$SCRIPT_DIR"
 # ---------------------------------------------------------------------------
 # 参数
 # ---------------------------------------------------------------------------
-GPU=0; DO_LOCK=0; DO_NCU=0; DO_SCALING=1; DO_AUTOTUNE=1
+GPU=0; DO_LOCK=0; DO_NCU=0; DO_SCALING=1; DO_AUTOTUNE=1; DO_BOTH=0
 BENCH_SIZE=4096; VERIFY_SIZE=2048; SCALING_SIZES="1024 2048 4096 8192"
 BENCH_SIZE_SET=""
+PASS_FLAGS=()   # --both 透传给两次子调用的标志
 while [ $# -gt 0 ]; do
   case "$1" in
     --gpu)   GPU="$2"; shift 2 ;;
     --lock)  DO_LOCK=1; shift ;;
-    --ncu)   DO_NCU=1; shift ;;
-    --quick) DO_SCALING=0; DO_AUTOTUNE=0; shift ;;
-    --sizes) BENCH_SIZE_SET="$2"; shift 2 ;;
+    --both)  DO_BOTH=1; shift ;;
+    --ncu)   DO_NCU=1; PASS_FLAGS+=(--ncu); shift ;;
+    --quick) DO_SCALING=0; DO_AUTOTUNE=0; PASS_FLAGS+=(--quick); shift ;;
+    --sizes) BENCH_SIZE_SET="$2"; PASS_FLAGS+=(--sizes "$2"); shift 2 ;;
     -h|--help) grep -E '^#( |$)' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "未知参数: $1（用 -h 看帮助）"; exit 1 ;;
   esac
 done
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-RESULT_DIR="${SCRIPT_DIR}/result"; RUN_DIR="${RESULT_DIR}/${TIMESTAMP}"
+RESULT_DIR="${SCRIPT_DIR}/result"
+
+# --both：一次跑【默认 + 锁频】两轮(各自完整)，同落 <ts>_both/{default,locked}/ 并自动出对比。
+# 用途：生成归档基线 / 直接看时钟策略对每个 kernel 的影响。子调用透传 --quick/--ncu/--sizes。
+if [ "$DO_BOTH" = 1 ]; then
+  PARENT="${RESULT_DIR}/${TIMESTAMP}_both"; mkdir -p "$PARENT"
+  echo "== --both：默认 + 锁频 两轮 → $PARENT =="
+  RUN_DIR_OVERRIDE="$PARENT/default" bash "$0" --gpu "$GPU" ${PASS_FLAGS[@]+"${PASS_FLAGS[@]}"}
+  RUN_DIR_OVERRIDE="$PARENT/locked"  bash "$0" --gpu "$GPU" --lock ${PASS_FLAGS[@]+"${PASS_FLAGS[@]}"}
+  python3 "${SCRIPT_DIR}/scripts/gemm_compare.py" "$PARENT/default" "$PARENT/locked" > "$PARENT/00_compare.md" 2>&1
+  ln -sfn "$PARENT" "${RESULT_DIR}/latest"
+  echo ""; echo "== --both 完成：对比报告 $PARENT/00_compare.md =="
+  cat "$PARENT/00_compare.md"
+  exit 0
+fi
+
+RUN_DIR="${RUN_DIR_OVERRIDE:-${RESULT_DIR}/${TIMESTAMP}}"
 mkdir -p "$RUN_DIR"
 TIMINGS_FILE="${RUN_DIR}/00_timings.tsv"; printf 'test\tseconds\tstatus\n' > "$TIMINGS_FILE"
 
@@ -124,7 +143,7 @@ TC_NAMES=(_ tc01_wmma_naive tc02_wmma_smem tc03_wmma_pipe tc04_wgmma_tma_ws tc05
 CLOCK_POLICY="default(开箱自适应boost)"
 if [ "$DO_LOCK" = 1 ]; then
   if sudo -n true 2>/dev/null && [ -n "$MAXCLK" ] && sudo -n nvidia-smi -i "$GPU" -lgc "$MAXCLK" >/dev/null 2>&1; then
-    CLOCK_POLICY="locked@${MAXCLK}MHz(额定boost)"; log " 已锁频 $GPU → ${MAXCLK}MHz（退出自动解锁）"
+    CLOCK_POLICY="locked@${MAXCLK}MHz(额定boost)"; log " 已锁频 GPU$GPU → ${MAXCLK}MHz（退出自动解锁）"
   else log " 警告: --lock 需免密 sudo + 可读 max 时钟；改用默认时钟"; fi
 fi
 log " 时钟策略: $CLOCK_POLICY"; echo "$CLOCK_POLICY" > "${RUN_DIR}/00_clock_policy.txt"

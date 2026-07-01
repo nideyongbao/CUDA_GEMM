@@ -1,1 +1,0 @@
-[tc_01 WMMA_naive] M=4096 N=4096 K=4096  time=7.7206 ms  GFLOPS=17801.59  util(vs148T)=12.0%

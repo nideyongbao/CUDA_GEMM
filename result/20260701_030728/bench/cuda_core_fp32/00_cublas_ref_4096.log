@@ -1,1 +1,0 @@
-cublas_ref: M=4096 N=4096 K=4096, time=7.2270 ms, GFLOPS=19017.48

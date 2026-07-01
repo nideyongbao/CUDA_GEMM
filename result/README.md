@@ -35,17 +35,32 @@ autotune.log              autotune 配置扫描
 profiling/                （仅 --ncu）本轮新采的 ncu：<kernel>.ncu-rep + .details.txt
 ```
 
+## `--both`：归档基线（默认+锁频一次出对比）
+
+`bash run_all.sh --both` 一次跑两轮，产 `result/<时间戳>_both/`：
+
+```
+<ts>_both/
+  default/    完整一轮(默认时钟)——结构同上
+  locked/     完整一轮(锁频1410)——结构同上
+  00_compare.md   逐 kernel 默认 vs 锁频 差异表 + 时钟 + 结论(scripts/gemm_compare.py 生成)
+```
+
+这是**推荐的归档方式**：一份快照同时给"真实开箱值(default)"与"可复现满频上限(locked)"，并直接量化 boost 抖动对每个 kernel 的影响。
+
 ## 怎么对比
 
 ```bash
-# 同机不同时钟策略：
+# --both 的现成对比：
+cat result/<ts>_both/00_compare.md
+
+# 手动对比两轮(同机不同时钟 / 跨机)：
+python3 scripts/gemm_compare.py result/<A> result/<B>
 diff result/<A>/bench/cuda_core_fp32/00_cublas_ref_4096.log \
      result/<B>/bench/cuda_core_fp32/00_cublas_ref_4096.log
 
 # 汇总横排：
-for d in result/2*/; do echo "== $d =="; cat "$d/00_summary.txt"; done
-
-# 单个 kernel 跨机器对比：把各机器的 result/<ts>/ 拷到一起 diff 对应文件即可
+for d in result/*/; do [ -f "$d/00_summary.txt" ] && { echo "== $d =="; cat "$d/00_summary.txt"; }; done
 ```
 
 ## git 约定

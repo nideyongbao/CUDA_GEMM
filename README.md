@@ -39,13 +39,17 @@
 **一键全量测试（任意机器，推荐）**——自动识别 GPU 架构、编译、跑正确性+性能+遥测、出汇总报告，结果按时间戳存入 `result/`：
 
 ```bash
-bash run_all.sh              # 开箱默认时钟，全量测试（新机器从零跑通就这一条）
-bash run_all.sh --lock       # 额外锁额定 boost（需 sudo，测可复现的满频上限）
+bash run_all.sh              # 开箱默认时钟（无需 root，任意机器兜底；对齐公开基准）
+bash run_all.sh --lock       # 锁额定 boost（需 sudo，可复现——做 kernel/机型公平对比用这个）
+bash run_all.sh --both       # 一次跑【默认+锁频】两轮并自动出对比（★归档基线标准）
 bash run_all.sh --quick      # 快速版（跳过尺寸缩放/autotune）
 bash run_all.sh --gpu 1      # 指定 GPU
 ```
 
-产物：`result/<时间戳>/`（各步 `.log` + 遥测 + `00_summary.md`），并软链 `result/latest`。每台机器跑一遍即得该机型完整 GEMM 结果；跨机型对比见 [docs/README](docs/README.md)。
+**选哪个**：日常/无 sudo → 默认；要可复现或跨 kernel/机型对比 → `--lock`；归档/看时钟影响 → `--both`。
+（默认 boost 会抖动，个别 kernel 可能被欠采 15–23%；锁频消除该噪声。详见 [docs/a800 §5](docs/a800/A800%20GEMM%20复现总结.md)。）
+
+产物：`result/<时间戳>/`（各步 `.log` + 逐示例日志 + 遥测 + `00_summary.md`）；`--both` 产 `result/<时间戳>_both/{default,locked}/` + `00_compare.md`。软链 `result/latest`。跨机型对比见 [docs/README](docs/README.md)。
 
 **手动分步**（原始入口，`make` 默认 H20 sm_90a；A800 见下方"在 A800 上构建"）：
 
