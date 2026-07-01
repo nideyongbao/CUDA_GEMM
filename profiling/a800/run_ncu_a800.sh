@@ -1,7 +1,9 @@
 #!/bin/bash
 # A800 (sm_80) ncu 剖析：与 H20 的 profiling/{cuda_core,tensor_core}/SUMMARY.md 同口径(2048^3, --set full,
 # -s 1 -c 1 取第2次 warmup launch)，用于 A800 vs H20 的逐核对比。采计数器需 root(本机 sudo 免密)。
-cd /data/env/workspace/0629/CUDA_GEMM || exit 1
+# 前置：先构建到 build/ —— make ARCH=-arch=sm_80 BUILD=build && make tc ARCH=-arch=sm_80 TC_HOPPER=0 BUILD=build
+# （生成本参考基线用；日常 ncu 建议直接 `bash run_all.sh --ncu`，输出进 result/<时间戳>/profiling/）
+cd "$(dirname "${BASH_SOURCE[0]}")/../.." || exit 1
 SZ=${1:-2048}
 NCU="sudo -n /usr/local/cuda-12.8/bin/ncu"
 IMP="/usr/local/cuda-12.8/bin/ncu"
@@ -12,9 +14,9 @@ prof(){ local name=$1 rgx=$2 exe=$3 id=$4
   echo "  rc=$?"
   $IMP -i "$OUT/$name.ncu-rep" --page details > "$OUT/$name.details.txt" 2>&1 || true
 }
-B=kernels/cuda_core/bench
-BB=kernels/cuda_core/bench_bf16
-T=kernels/tensor_core/bench
+B=build/cuda_core/bench
+BB=build/cuda_core/bench_bf16
+T=build/tensor_core/bench
 echo "######## A800 CUDA core FP32 ########"
 prof a800_cc_00_cublas        gemm                 $B 0
 prof a800_cc_01_naive         naive_kernel         $B 1

@@ -1,11 +1,7 @@
-# 编译产物（可执行文件）——锚定到 kernels/ 路径，避免误伤 result/<ts>/bench|verify/ 目录
+# 编译产物：out-of-source → build/(手动 make) 或 result/<时间戳>/build/(run_all.sh)。
+# "build/" 匹配任意层级的 build 目录，代码目录 kernels/ 不再产生任何产物。
 *.o
-kernels/cuda_core/bench
-kernels/cuda_core/verify
-kernels/cuda_core/bench_bf16
-kernels/cuda_core/verify_bf16
-kernels/tensor_core/bench
-kernels/tensor_core/verify
+build/
 
 # Nsight 报告（大二进制；文本 details/SUMMARY 保留入库）
 #*.ncu-rep

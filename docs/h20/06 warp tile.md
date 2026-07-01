@@ -11,7 +11,7 @@
 sudo /usr/local/cuda/bin/ncu --set basic \
     -k regex:"w" \
     --launch-count 1 \
-    ./kernels/cuda_core/bench 10 4096 4096 4096
+    ./build/cuda_core/bench 10 4096 4096 4096
 ```
 
 ```
@@ -43,7 +43,7 @@ Memory 66.36% 和 Compute 69.54% 大致持平，ncu 也直接给了 "Compute and
 sudo /usr/local/cuda/bin/ncu --set basic \
     -k regex:"w" \
     --launch-count 1 \
-    ./kernels/cuda_core/bench 9 4096 4096 4096
+    ./build/cuda_core/bench 9 4096 4096 4096
 ```
 
 ```
@@ -77,7 +77,7 @@ smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_math_pipe_throttle_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio \
--k regex:"w" --launch-count 1 ./kernels/cuda_core/bench 10 4096 4096 4096
+-k regex:"w" --launch-count 1 ./build/cuda_core/bench 10 4096 4096 4096
 ```
 
 ```
@@ -107,7 +107,7 @@ smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio \
 
 ```
 sudo /usr/local/cuda/bin/ncu --section SchedulerStats \
-    -k regex:"w" --launch-count 1 ./kernels/cuda_core/bench 10 4096 4096 4096
+    -k regex:"w" --launch-count 1 ./build/cuda_core/bench 10 4096 4096 4096
 ```
 
 ```
@@ -129,7 +129,7 @@ sudo /usr/local/cuda/bin/ncu --section SchedulerStats \
 sudo /usr/local/cuda/bin/ncu --metrics \
 l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_ld.ratio,\
 l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_st.ratio \
--k regex:"w" --launch-count 1 ./kernels/cuda_core/bench 10 4096 4096 4096
+-k regex:"w" --launch-count 1 ./build/cuda_core/bench 10 4096 4096 4096
 ```
 
 ```
@@ -147,7 +147,7 @@ l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_st.ratio \
 sudo /usr/local/cuda/bin/ncu --metrics \
 l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum,\
 l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st.sum \
--k regex:"w" --launch-count 1 ./kernels/cuda_core/bench 10 4096 4096 4096
+-k regex:"w" --launch-count 1 ./build/cuda_core/bench 10 4096 4096 4096
 ```
 
 ```

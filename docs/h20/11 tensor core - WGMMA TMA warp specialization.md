@@ -12,7 +12,7 @@ WMMA 是 **warp 级**：32 线程先把 fragment `load_matrix_sync` 装进寄存
 
 ## 1、观大局
 ```
-sudo /usr/local/cuda/bin/ncu --set full -k regex:"wgmma_kernel" -s 1 -c 1 ./kernels/tensor_core/bench 4 2048 2048 2048
+sudo /usr/local/cuda/bin/ncu --set full -k regex:"wgmma_kernel" -s 1 -c 1 ./build/tensor_core/bench 4 2048 2048 2048
 ```
 
 ```
@@ -40,7 +40,7 @@ sudo /usr/local/cuda/bin/ncu --section WarpStateStats \
 smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_barrier_per_issue_active.ratio \
-  -k regex:"wgmma_kernel" -s 1 -c 1 ./kernels/tensor_core/bench 4 2048 2048 2048
+  -k regex:"wgmma_kernel" -s 1 -c 1 ./build/tensor_core/bench 4 2048 2048 2048
 ```
 
 ```

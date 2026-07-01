@@ -19,7 +19,7 @@ max_abs 2.9e-2 看着比 bf16 大，但这是 fp8(e4m3 只有 3 位尾数)的固
 
 ## 2、观大局
 ```
-sudo /usr/local/cuda/bin/ncu --set full -k regex:"wgmma_fp8_kernel" -s 1 -c 1 ./kernels/tensor_core/bench 5 2048 2048 2048
+sudo /usr/local/cuda/bin/ncu --set full -k regex:"wgmma_fp8_kernel" -s 1 -c 1 ./build/tensor_core/bench 5 2048 2048 2048
 ```
 
 ```
@@ -42,7 +42,7 @@ sudo /usr/local/cuda/bin/ncu --section WarpStateStats \
 smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_barrier_per_issue_active.ratio \
-  -k regex:"wgmma_fp8_kernel" -s 1 -c 1 ./kernels/tensor_core/bench 5 2048 2048 2048
+  -k regex:"wgmma_fp8_kernel" -s 1 -c 1 ./build/tensor_core/bench 5 2048 2048 2048
 ```
 
 ```

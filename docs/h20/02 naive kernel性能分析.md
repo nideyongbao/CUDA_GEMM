@@ -5,7 +5,7 @@
 sudo /usr/local/cuda/bin/ncu --set basic \
     -k regex:"naive" \
     --launch-count 1 \
-    ./kernels/cuda_core/bench 1 4096 4096 4096
+    ./build/cuda_core/bench 1 4096 4096 4096
 ```
 
 ```
@@ -38,7 +38,7 @@ smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_math_pipe_throttle_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio \
--k regex:"naive" --launch-count 1 ./kernels/cuda_core/bench 1 4096 4096 4096
+-k regex:"naive" --launch-count 1 ./build/cuda_core/bench 1 4096 4096 4096
 ```
 
 ```
@@ -61,7 +61,7 @@ smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio \
 **不包括** shared memory（那是 `short_scoreboard`，这里 0.01 → naive 根本没用 smem）；也几乎没有 `mio_throttle`（naive 没有 LDS，MIO 队列不堵）。结论很干净：**naive 唯一的病是等全局内存 load 回来**。
 
 ```
- sudo /usr/local/cuda/bin/ncu --section SchedulerStats -k regex:"naive" --launch-count 1 ./kernels/cuda_core/bench 1 4096 4096 4096
+ sudo /usr/local/cuda/bin/ncu --section SchedulerStats -k regex:"naive" --launch-count 1 ./build/cuda_core/bench 1 4096 4096 4096
 ```
 
 ```
@@ -83,7 +83,7 @@ H20 一个 SM 有 64 个 warp（4 个 scheduler，每个上限 **16** warp，注
 sudo /usr/local/cuda/bin/ncu --metrics \
 l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_ld.ratio,\
 l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_st.ratio \
--k regex:"naive" --launch-count 1 ./kernels/cuda_core/bench 1 4096 4096 4096
+-k regex:"naive" --launch-count 1 ./build/cuda_core/bench 1 4096 4096 4096
 ```
 
 ```
@@ -97,7 +97,7 @@ l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_st.ratio \
 sudo /usr/local/cuda/bin/ncu --metrics \
 l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum,\
 l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st.sum \
--k regex:"naive" --launch-count 1 ./kernels/cuda_core/bench 1 4096 4096 4096
+-k regex:"naive" --launch-count 1 ./build/cuda_core/bench 1 4096 4096 4096
 ```
 
 ```

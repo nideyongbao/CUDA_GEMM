@@ -53,8 +53,8 @@ bash run_all.sh --gpu 1      # 指定 GPU
 make            # 编译 CUDA core：bench / verify / bench_bf16 / verify_bf16
 make tc         # 编译 Tensor Core：统一 bench / verify 驱动
 
-./kernels/cuda_core/bench  10 4096 4096 4096   # 跑 FP32 warptile_vec @4096³
-./kernels/tensor_core/bench 4 4096 4096 4096   # 跑 WGMMA(TMA+WS) @4096³
+./build/cuda_core/bench  10 4096 4096 4096   # 跑 FP32 warptile_vec @4096³
+./build/tensor_core/bench 4 4096 4096 4096   # 跑 WGMMA(TMA+WS) @4096³
 ```
 
 矩阵计算接口统一为 `C = alpha * A * B + beta * C`，A、B、C 均 **row-major**；cuBLAS reference 通过交换 A/B 与维度参数适配 row-major 结果。
@@ -66,23 +66,25 @@ make tc         # 编译 Tensor Core：统一 bench / verify 驱动
 按"**计算引擎**"对称拆分——`cuda_core` 与 `tensor_core` 各自有一套 `bench <id>` / `verify <id>` 驱动，命令、目录、profiling 一一对应：
 
 ```
-kernels/
+kernels/          【只放代码】编译产物 out-of-source，不落在此
   cuda_core/      FP32 阶梯(01_naive…10_doublebuffer) + BF16 对照(bf16_cudacore.cu)
                   驱动源码 benchmark.cu / verify.cu / bench_bf16.cu / verify_bf16.cu
-                  ↳ make 后可执行文件 bench / verify / bench_bf16 / verify_bf16 也输出在此
   tensor_core/    5 个用例(tc_01_wmma_naive…tc_05_wgmma_fp8)，各自保留专属 harness、
                   编成 kernel-only 对象，由派发表 tc_cases.h + bench.cu / verify.cu
                   按 id(1–5) 统一驱动
 include/          公共宏、FP32/BF16 声明、autotuning 模板、tensor core 脚手架 tc_common.cuh
-profiling/        ncu 剖析，按引擎分目录 cuda_core/ + tensor_core/
-docs/             GPU 硬件知识、性能方法论、逐 kernel 的 ncu 分析（00–07 CUDA core，
-                  08–12 Tensor core，13 总结）
+scripts/          工具：gemm_summary.py（汇总报告生成器）
+build/            【产物】make 输出的 .o 与可执行(bench/verify/…)；out-of-source，已 gitignore
+                  （run_all.sh 则输出到 result/<时间戳>/build/，随快照走）
+profiling/        各机型策展的 ncu 参考基线：cuda_core/ + tensor_core/(H20) + a800/
+docs/             按机型分目录：h20/(00–13 分析+总结) + a800/ + README(机型对比索引)
+result/           【瞬时快照】run_all.sh 每次执行的逐示例日志+遥测+profiling+汇总
 ```
 
 | | CUDA core / FP32 | Tensor Core |
 | --- | --- | --- |
-| 跑性能 | `./kernels/cuda_core/bench <id> M N K` | `./kernels/tensor_core/bench <id> [M N K]` |
-| 对拍正确性 | `./kernels/cuda_core/verify <id> M N K` | `./kernels/tensor_core/verify <id> [M N K]` |
+| 跑性能 | `./build/cuda_core/bench <id> M N K` | `./build/tensor_core/bench <id> [M N K]` |
+| 对拍正确性 | `./build/cuda_core/verify <id> M N K` | `./build/tensor_core/verify <id> [M N K]` |
 | id 范围 | 0–12（见下） | 1–5（见下） |
 | profiling | `profiling/cuda_core/` | `profiling/tensor_core/` |
 
@@ -124,10 +126,10 @@ A800 全量复现结果、与 H20/cuBLAS/理论峰值/公开基准的对账见 *
 ## 运行：CUDA core（FP32）
 
 ```bash
-./kernels/cuda_core/verify              # 默认 id=0(cuBLAS)，1024³
-./kernels/cuda_core/verify <id> M N K   # 指定 kernel 与尺寸
-./kernels/cuda_core/bench  <id> M N K   # 性能 + GFLOPS
-./kernels/cuda_core/bench  autotune M N K   # autotuning 配置扫描
+./build/cuda_core/verify              # 默认 id=0(cuBLAS)，1024³
+./build/cuda_core/verify <id> M N K   # 指定 kernel 与尺寸
+./build/cuda_core/bench  <id> M N K   # 性能 + GFLOPS
+./build/cuda_core/bench  autotune M N K   # autotuning 配置扫描
 ```
 
 `verify` 跑目标 kernel 与 cuBLAS reference 对拍，输出 `max_abs_err / max_rel_err / bad_count / PASS|FAIL`；误差判据为 numpy `allclose` 风格 `|a-b| <= atol + rtol·|b|`（atol=rtol=1e-2，消除随机数据下近零元素的假 FAIL）。传入非法 id 会打印当前注册表。
@@ -155,8 +157,8 @@ A800 全量复现结果、与 H20/cuBLAS/理论峰值/公开基准的对账见 *
 `make` 还生成 `bench_bf16` / `verify_bf16`：把上面那批 kernel 改成 **BF16 输入 / FP32 累加**，但**仍跑在 CUDA core 上**——用来证明"光换数据类型、不碰张量核没用"。
 
 ```bash
-./kernels/cuda_core/bench_bf16  <id> M N K   # GFLOPS 及对 148 TFLOPS BF16 峰值的利用率
-./kernels/cuda_core/verify_bf16 <id> M N K   # 与 cuBLAS BF16 对拍
+./build/cuda_core/bench_bf16  <id> M N K   # GFLOPS 及对 148 TFLOPS BF16 峰值的利用率
+./build/cuda_core/verify_bf16 <id> M N K   # 与 cuBLAS BF16 对拍
 ```
 
 id 0=cuBLAS BF16，1–12 与 FP32 同名。结论：全量天花板只有 **~17%**（compute bound 仍卡在 FP32 单元，BF16 只省了一半访存）。
@@ -167,16 +169,16 @@ id 0=cuBLAS BF16，1–12 与 FP32 同名。结论：全量天花板只有 **~17
 
 ```bash
 make tc
-./kernels/tensor_core/verify <id> [M N K]   # 对拍参考，打印 PASS/FAIL
-./kernels/tensor_core/bench  <id> [M N K]   # 纯计时 + 利用率
+./build/tensor_core/verify <id> [M N K]   # 对拍参考，打印 PASS/FAIL
+./build/tensor_core/bench  <id> [M N K]   # 纯计时 + 利用率
 ```
 
 - 不带 id 默认 **id=4（tc_04 WGMMA，手写阶梯标杆）@ 4096³**；非法 id 会打印用例列表。
 - `tc_05` FP8 没有简单 cuBLAS 路径，`verify` 用 CPU double 参考（O(n³)），自动在 **≤512³** 上对拍。
 
 ```bash
-./kernels/tensor_core/bench  4 4096 4096 4096   # tc_04 WGMMA @4096³
-./kernels/tensor_core/verify 5 512 512 512      # tc_05 FP8 对拍 CPU double
+./build/tensor_core/bench  4 4096 4096 4096   # tc_04 WGMMA @4096³
+./build/tensor_core/verify 5 512 512 512      # tc_05 FP8 对拍 CPU double
 ```
 
 用例阶梯与利用率见文首「结果速览」表。逐例 ncu 分析见 docs 08–12。
@@ -195,7 +197,7 @@ make tc
 - 本机采计数器需 root：`sudo /usr/local/cuda/bin/ncu`（见各 SUMMARY 头注）。
 
 ```bash
-sudo /usr/local/cuda/bin/ncu --set full ./kernels/cuda_core/bench 10 4096 4096 4096
+sudo /usr/local/cuda/bin/ncu --set full ./build/cuda_core/bench 10 4096 4096 4096
 ```
 
 文档主要关注：kernel duration / elapsed cycles、Compute(SM) 与 Memory Throughput、DRAM/L1·TEX/L2 Throughput、achieved occupancy、registers per thread、global coalescing、shared bank conflict、warp stall reason。

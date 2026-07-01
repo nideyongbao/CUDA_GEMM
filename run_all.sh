@@ -153,11 +153,13 @@ run_test "01_fingerprint" "cat ${RUN_DIR}/01_fingerprint.txt"
 # ---------------------------------------------------------------------------
 # 5. 编译
 # ---------------------------------------------------------------------------
-run_test "02_build" "make clean; make ARCH=-arch=$SM_ARCH -j$JOBS && make tc ARCH=-arch=$SM_ARCH TC_HOPPER=$TC_HOPPER -j$JOBS"
-[ -x kernels/cuda_core/bench ] && [ -x kernels/tensor_core/bench ] || { echo "错误: 编译失败，见 ${RUN_DIR}/02_build.log"; tail -20 "${RUN_DIR}/02_build.log"; exit 1; }
-CC_B=kernels/cuda_core/bench; CC_V=kernels/cuda_core/verify
-BF_B=kernels/cuda_core/bench_bf16; BF_V=kernels/cuda_core/verify_bf16
-TC_B=kernels/tensor_core/bench; TC_V=kernels/tensor_core/verify
+# out-of-source 构建：产物进 result/<ts>/build/，代码目录 kernels/ 保持干净
+BDIR="${RUN_DIR}/build"
+run_test "02_build" "make clean BUILD='$BDIR'; make ARCH=-arch=$SM_ARCH BUILD='$BDIR' -j$JOBS && make tc ARCH=-arch=$SM_ARCH TC_HOPPER=$TC_HOPPER BUILD='$BDIR' -j$JOBS"
+[ -x "$BDIR/cuda_core/bench" ] && [ -x "$BDIR/tensor_core/bench" ] || { echo "错误: 编译失败，见 ${RUN_DIR}/02_build.log"; tail -20 "${RUN_DIR}/02_build.log"; exit 1; }
+CC_B="$BDIR/cuda_core/bench"; CC_V="$BDIR/cuda_core/verify"
+BF_B="$BDIR/cuda_core/bench_bf16"; BF_V="$BDIR/cuda_core/verify_bf16"
+TC_B="$BDIR/tensor_core/bench"; TC_V="$BDIR/tensor_core/verify"
 
 # ---------------------------------------------------------------------------
 # 6. 正确性（逐 kernel 各存一份日志）

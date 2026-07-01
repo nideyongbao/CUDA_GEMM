@@ -7,7 +7,7 @@
 sudo /usr/local/cuda/bin/ncu --set basic \
     -k regex:"D" \
     --launch-count 1 \
-    ./kernels/cuda_core/bench 4 4096 4096 4096
+    ./build/cuda_core/bench 4 4096 4096 4096
 ```
 
 ```
@@ -45,7 +45,7 @@ smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_math_pipe_throttle_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio \
--k regex:"D" --launch-count 1 ./kernels/cuda_core/bench 4 4096 4096 4096
+-k regex:"D" --launch-count 1 ./build/cuda_core/bench 4 4096 4096 4096
 ```
 
 ```
@@ -74,7 +74,7 @@ smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio \
 最直接的印证是 **`mio_throttle` 从 21.74 掉到 0.22**——smem 那一版 MIO 队列被 LDS 塞爆的拥堵**彻底消失了**。剩下四项 stall（long_scoreboard 1.19 / short_scoreboard 1.82 / mio 0.22 / math 0.11）都很小且分布平均，没有哪一项再独大。
 
 ```
- sudo /usr/local/cuda/bin/ncu --section SchedulerStats -k regex:"D" --launch-count 1 ./kernels/cuda_core/bench 4 4096 4096 4096
+ sudo /usr/local/cuda/bin/ncu --section SchedulerStats -k regex:"D" --launch-count 1 ./build/cuda_core/bench 4 4096 4096 4096
 ```
 
 ```
@@ -103,7 +103,7 @@ smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio \
 sudo /usr/local/cuda/bin/ncu --metrics \
 l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_ld.ratio,\
 l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_st.ratio \
--k regex:"D" --launch-count 1 ./kernels/cuda_core/bench 4 4096 4096 4096
+-k regex:"D" --launch-count 1 ./build/cuda_core/bench 4 4096 4096 4096
 ```
 
 ```
@@ -132,7 +132,7 @@ l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_st.ratio \
 sudo /usr/local/cuda/bin/ncu --metrics \
 l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum,\
 l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st.sum \
--k regex:"D" --launch-count 1 ./kernels/cuda_core/bench 4 4096 4096 4096
+-k regex:"D" --launch-count 1 ./build/cuda_core/bench 4 4096 4096 4096
 ```
 
 ```

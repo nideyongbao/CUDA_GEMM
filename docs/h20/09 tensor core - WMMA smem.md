@@ -7,7 +7,7 @@
 
 ## 1、观大局
 ```
-sudo /usr/local/cuda/bin/ncu --set full -k regex:"wmma_smem_kernel" -s 1 -c 1 ./kernels/tensor_core/bench 2 2048 2048 2048
+sudo /usr/local/cuda/bin/ncu --set full -k regex:"wmma_smem_kernel" -s 1 -c 1 ./build/tensor_core/bench 2 2048 2048 2048
 ```
 
 ```
@@ -31,7 +31,7 @@ sudo /usr/local/cuda/bin/ncu --section WarpStateStats \
 smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_barrier_per_issue_active.ratio \
-  -k regex:"wmma_smem_kernel" -s 1 -c 1 ./kernels/tensor_core/bench 2 2048 2048 2048
+  -k regex:"wmma_smem_kernel" -s 1 -c 1 ./build/tensor_core/bench 2 2048 2048 2048
 ```
 
 ```

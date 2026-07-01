@@ -5,7 +5,7 @@
 sudo /usr/local/cuda/bin/ncu --set basic \
     -k regex:"smem" \
     --launch-count 1 \
-    ./kernels/cuda_core/bench 2 4096 4096 4096
+    ./build/cuda_core/bench 2 4096 4096 4096
 ```
 
 ```
@@ -41,7 +41,7 @@ smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_math_pipe_throttle_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio \
--k regex:"smem" --launch-count 1 ./kernels/cuda_core/bench 2 4096 4096 4096
+-k regex:"smem" --launch-count 1 ./build/cuda_core/bench 2 4096 4096 4096
 ```
 
 ```
@@ -65,7 +65,7 @@ smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio \
 这里有个值得停下来想的细节：**cyc/issue 反而从 naive 的 37.78 涨到了 43.66，可整体却更快了（41→27.27 ms）。** 看似矛盾，其实不矛盾——smem 版本因为数据被复用，**总指令条数少了非常多**。每条发射虽然更"贵"（要排 MIO 的队），但要发的指令本来就少，"少而每条更慢"仍然干得过"多而每条略快"。所以单看 cyc/issue 这一个数会被带偏，得结合总指令量一起看。
 
 ```
-sudo /usr/local/cuda/bin/ncu --section SchedulerStats -k regex:"smem" --launch-count 1 ./kernels/cuda_core/bench 2 4096 4096 4096
+sudo /usr/local/cuda/bin/ncu --section SchedulerStats -k regex:"smem" --launch-count 1 ./build/cuda_core/bench 2 4096 4096 4096
 ```
 
 ```
@@ -101,7 +101,7 @@ scheduler 大量空转 → SM 算力口径(76%)上不去
 sudo /usr/local/cuda/bin/ncu --metrics \
 l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_ld.ratio,\
 l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_st.ratio \
--k regex:"smem" --launch-count 1 ./kernels/cuda_core/bench 2 4096 4096 4096
+-k regex:"smem" --launch-count 1 ./build/cuda_core/bench 2 4096 4096 4096
 ```
 
 ```
@@ -117,7 +117,7 @@ l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_st.ratio \
 sudo /usr/local/cuda/bin/ncu --metrics \
 l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum,\
 l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st.sum \
--k regex:"smem" --launch-count 1 ./kernels/cuda_core/bench 2 4096 4096 4096
+-k regex:"smem" --launch-count 1 ./build/cuda_core/bench 2 4096 4096 4096
 ```
 
 ```

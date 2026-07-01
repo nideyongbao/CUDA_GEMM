@@ -47,7 +47,7 @@ make tc ARCH=-arch=sm_80 TC_HOPPER=0   # Tensor Core 只编 WMMA 三级(tc_01-03
 构建后 tensor_core 派发表正确只剩 3 个用例：
 
 ```
-$ ./kernels/tensor_core/bench 99
+$ ./build/tensor_core/bench 99
 tensor_core 用例 id：
   1  tc_01 WMMA_naive
   2  tc_02 WMMA_smem
@@ -258,9 +258,9 @@ git checkout feat/a800-reproduction
 make ARCH=-arch=sm_80                  # FP32 + BF16
 make tc ARCH=-arch=sm_80 TC_HOPPER=0   # WMMA(tc_01-03)
 sudo nvidia-smi -i 0 -lgc 1410         # 锁额定 boost 以复现 canonical（默认 boost 会随预热漂移）
-./kernels/cuda_core/bench 0 4096 4096 4096        # FP32 cuBLAS
-./kernels/cuda_core/bench_bf16 0 4096 4096 4096   # BF16 cuBLAS
-./kernels/tensor_core/bench 3 4096 4096 4096      # WMMA pipe
+./build/cuda_core/bench 0 4096 4096 4096        # FP32 cuBLAS
+./build/cuda_core/bench_bf16 0 4096 4096 4096   # BF16 cuBLAS
+./build/tensor_core/bench 3 4096 4096 4096      # WMMA pipe
 sudo nvidia-smi -i 0 -rgc              # 用完解锁
 ```
 

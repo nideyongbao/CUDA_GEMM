@@ -5,7 +5,7 @@
 sudo /usr/local/cuda/bin/ncu --set basic \
     -k regex:"v" \
     --launch-count 1 \
-    ./kernels/cuda_core/bench 5 4096 4096 4096
+    ./build/cuda_core/bench 5 4096 4096 4096
 ```
 
 ```
@@ -54,7 +54,7 @@ smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_math_pipe_throttle_per_issue_active.ratio,\
 smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio \
--k regex:"v" --launch-count 1 ./kernels/cuda_core/bench 5 4096 4096 4096
+-k regex:"v" --launch-count 1 ./build/cuda_core/bench 5 4096 4096 4096
 ```
 
 ```
@@ -78,7 +78,7 @@ smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio \
 `Warp Cycles Per Issued = 11.21`（04 是 8.18，略微升了一点点），但更关键的是 **stall 已经被打散了**：long_scoreboard 2.16、short_scoreboard 1.81、mio_throttle 1.09、math_pipe 0.06——再没有一项独大。对比 naive 阶段 long_scoreboard 一项 13.95 碾压全场，现在是"哪一项都不算高、谁也不主导"的健康状态：等全局内存（long 2.16）、等 shared（short 1.81）、MIO 队列（mio 1.09）三者势均力敌。这说明前几步该治的延迟都治得差不多了，cyc/issue 这点小幅上升只是并发结构变化的副产物，不是新病灶。
 
 ```
- sudo /usr/local/cuda/bin/ncu --section SchedulerStats -k regex:"v" --launch-count 1 ./kernels/cuda_core/bench 5 4096 4096 4096
+ sudo /usr/local/cuda/bin/ncu --section SchedulerStats -k regex:"v" --launch-count 1 ./build/cuda_core/bench 5 4096 4096 4096
 ```
 
 ```
@@ -101,7 +101,7 @@ smsp__average_warps_issue_stalled_mio_throttle_per_issue_active.ratio \
 sudo /usr/local/cuda/bin/ncu --metrics \
 l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_ld.ratio,\
 l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_st.ratio \
--k regex:"v" --launch-count 1 ./kernels/cuda_core/bench 5 4096 4096 4096
+-k regex:"v" --launch-count 1 ./build/cuda_core/bench 5 4096 4096 4096
 ```
 
 ```
@@ -139,7 +139,7 @@ t4: A[2*K + 0]     ...                 ← 又跳一行
 sudo /usr/local/cuda/bin/ncu --metrics \
 l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum,\
 l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st.sum \
--k regex:"v" --launch-count 1 ./kernels/cuda_core/bench 5 4096 4096 4096
+-k regex:"v" --launch-count 1 ./build/cuda_core/bench 5 4096 4096 4096
 ```
 ```
     -------------------------------------------------------- ----------- ------------

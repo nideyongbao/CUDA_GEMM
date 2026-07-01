@@ -14,7 +14,7 @@ sudo /usr/local/cuda/bin/ncu --metrics \
 l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum,\
 l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_st.sum,\
 l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_ld.ratio \
--k regex:"bank" --launch-count 1 ./kernels/cuda_core/bench 11 4096 4096 4096
+-k regex:"bank" --launch-count 1 ./build/cuda_core/bench 11 4096 4096 4096
 ```
 
 | 指标 | 06 warp_tile_vec(id 10，padding 前) | 09 bank_conflict(id 11，+4 padding 后) |
@@ -38,7 +38,7 @@ padding + 搬运映射改造把写 As 的 bank conflict 砍了约 4×（21.9M→
 
 ## 3、收官：double buffer
 ```
-sudo /usr/local/cuda/bin/ncu --set basic -k regex:"double" --launch-count 1 ./kernels/cuda_core/bench 12 4096 4096 4096
+sudo /usr/local/cuda/bin/ncu --set basic -k regex:"double" --launch-count 1 ./build/cuda_core/bench 12 4096 4096 4096
 ```
 
 ```
