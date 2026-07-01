@@ -1,0 +1,3 @@
+[tc_01 WMMA_naive] VERIFY max_abs=0.000e+00 bad=0/4194304  PASS
+[tc_02 WMMA_smem] VERIFY max_abs=0.000e+00 bad=0/4194304  PASS
+[tc_03 WMMA_pipe] VERIFY max_abs=0.000e+00 bad=0/4194304  PASS

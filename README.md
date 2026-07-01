@@ -30,11 +30,24 @@
 | 5 | tc_05 WGMMA_fp8 | 同上换 FP8 | 75.8% /296T（224 TFLOPS）|
 | — | 参考 cuBLAS BF16（fair） | — | 89.1% |
 
-> 一句话结论：**warp 级 WMMA 靠高占用率（TLP）藏延迟，张量核吃不饱（≤26%）；warpgroup 级 WGMMA 靠异步多级流水线，占用率仅 7.6% 却把 SM Busy 拉到 83%**——这才是 Hopper 上逼近 148T 的路。详见 [docs/13](docs/13%20H20%20GEMM%20复现总结.md)。
+> 一句话结论：**warp 级 WMMA 靠高占用率（TLP）藏延迟，张量核吃不饱（≤26%）；warpgroup 级 WGMMA 靠异步多级流水线，占用率仅 7.6% 却把 SM Busy 拉到 83%**——这才是 Hopper 上逼近 148T 的路。详见 [docs/13](docs/h20/13%20H20%20GEMM%20复现总结.md)。
 
 ---
 
 ## 快速开始
+
+**一键全量测试（任意机器，推荐）**——自动识别 GPU 架构、编译、跑正确性+性能+遥测、出汇总报告，结果按时间戳存入 `result/`：
+
+```bash
+bash run_all.sh              # 开箱默认时钟，全量测试（新机器从零跑通就这一条）
+bash run_all.sh --lock       # 额外锁额定 boost（需 sudo，测可复现的满频上限）
+bash run_all.sh --quick      # 快速版（跳过尺寸缩放/autotune）
+bash run_all.sh --gpu 1      # 指定 GPU
+```
+
+产物：`result/<时间戳>/`（各步 `.log` + 遥测 + `00_summary.md`），并软链 `result/latest`。每台机器跑一遍即得该机型完整 GEMM 结果；跨机型对比见 [docs/README](docs/README.md)。
+
+**手动分步**（原始入口，`make` 默认 H20 sm_90a；A800 见下方"在 A800 上构建"）：
 
 ```bash
 make            # 编译 CUDA core：bench / verify / bench_bf16 / verify_bf16
@@ -102,7 +115,7 @@ make ARCH=-arch=sm_80                  # CUDA core FP32+BF16（源码零改动�
 make tc ARCH=-arch=sm_80 TC_HOPPER=0   # Tensor Core 只编 tc_01-03（WMMA）
 ```
 
-A800 全量复现结果、与 H20/cuBLAS/理论峰值/公开基准的对账见 **[docs/A800 GEMM 复现总结](docs/A800%20GEMM%20复现总结.md)**（profiling 数据在 `profiling/a800/`）。一句话：A800 BF16 张量核峰值 312T（H20 的 2.1×），cuBLAS BF16 实测 214–294T；但手写阶梯在 Ampere 上止步 WMMA（tc_03 43T，13.8% 峰），因 WGMMA/TMA/FP8 是 Hopper 独占。
+A800 全量复现结果、与 H20/cuBLAS/理论峰值/公开基准的对账见 **[docs/A800 GEMM 复现总结](docs/a800/A800%20GEMM%20复现总结.md)**（profiling 数据在 `profiling/a800/`）。一句话：A800 BF16 张量核峰值 312T（H20 的 2.1×），cuBLAS BF16 实测 214–294T；但手写阶梯在 Ampere 上止步 WMMA（tc_03 43T，13.8% 峰），因 WGMMA/TMA/FP8 是 Hopper 独占。
 
 `make tc` 把 5 个用例编成 kernel-only 对象，链接成两个统一驱动（`tc_04/tc_05` 用 TMA，额外链 `-lcuda`）。产物按引擎分目录，不再污染仓库根目录。
 
@@ -195,24 +208,24 @@ sudo /usr/local/cuda/bin/ncu --set full ./kernels/cuda_core/bench 10 4096 4096 4
 
 建议顺序阅读：
 
-1. [GPU 前置硬件知识](docs/00%20GPU前置硬件知识.md)
-2. [性能分析方法论](docs/01%20性能分析方法论.md)
-3. [naive kernel 性能分析](docs/02%20naive%20kernel性能分析.md)
-4. [smem kernel 性能分析](docs/03%20smem%20kernel性能分析.md)
-5. [register tiling](docs/04%20register%20tiling.md)
-6. [vectorizer](docs/05%20vectorizer.md)
-7. [warp tile](docs/06%20warp%20tile.md)
-8. [bank conflict](docs/07%20blank%20conflict.md)
+1. [GPU 前置硬件知识](docs/h20/00%20GPU前置硬件知识.md)
+2. [性能分析方法论](docs/h20/01%20性能分析方法论.md)
+3. [naive kernel 性能分析](docs/h20/02%20naive%20kernel性能分析.md)
+4. [smem kernel 性能分析](docs/h20/03%20smem%20kernel性能分析.md)
+5. [register tiling](docs/h20/04%20register%20tiling.md)
+6. [vectorizer](docs/h20/05%20vectorizer.md)
+7. [warp tile](docs/h20/06%20warp%20tile.md)
+8. [bank conflict](docs/h20/07%20blank%20conflict.md)
 
 Tensor Core 系列（每个用例一篇，含 ncu 分析）：
 
-9. [WMMA naive](docs/08%20tensor%20core%20-%20WMMA%20naive.md)
-10. [WMMA smem](docs/09%20tensor%20core%20-%20WMMA%20smem.md)
-11. [WMMA cp.async pipeline](docs/10%20tensor%20core%20-%20WMMA%20cp.async%20pipeline.md)
-12. [WGMMA + TMA + warp specialization](docs/11%20tensor%20core%20-%20WGMMA%20TMA%20warp%20specialization.md)
-13. [FP8 WGMMA](docs/12%20tensor%20core%20-%20FP8%20WGMMA.md)
+9. [WMMA naive](docs/h20/08%20tensor%20core%20-%20WMMA%20naive.md)
+10. [WMMA smem](docs/h20/09%20tensor%20core%20-%20WMMA%20smem.md)
+11. [WMMA cp.async pipeline](docs/h20/10%20tensor%20core%20-%20WMMA%20cp.async%20pipeline.md)
+12. [WGMMA + TMA + warp specialization](docs/h20/11%20tensor%20core%20-%20WGMMA%20TMA%20warp%20specialization.md)
+13. [FP8 WGMMA](docs/h20/12%20tensor%20core%20-%20FP8%20WGMMA.md)
 
-**最终总结**（重点收敛）：[docs/13 H20 GEMM 复现总结.md](docs/13%20H20%20GEMM%20复现总结.md)；**A800 迁移复现**：[docs/A800 GEMM 复现总结.md](docs/A800%20GEMM%20复现总结.md)。早期逐步复现详录见 [docs/H20复现结论.md](docs/H20复现结论.md)；`docs/6.1.md`–`6.5.md` 是阶段性交接文档（实验结论、性能对账、踩坑、下一步），想快速了解项目演进可从最新的 [6.5](docs/6.5.md) 看起。
+**最终总结**（重点收敛）：[docs/13 H20 GEMM 复现总结.md](docs/h20/13%20H20%20GEMM%20复现总结.md)；**A800 迁移复现**：[docs/A800 GEMM 复现总结.md](docs/a800/A800%20GEMM%20复现总结.md)。早期逐步复现详录见 [docs/H20复现结论.md](docs/h20/H20复现结论.md)；`docs/6.1.md`–`6.5.md` 是阶段性交接文档（实验结论、性能对账、踩坑、下一步），想快速了解项目演进可从最新的 [6.5](docs/h20/6.5.md) 看起。
 
 ---
 

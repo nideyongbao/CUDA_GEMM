@@ -1,0 +1,13 @@
+cublas_ref: M=4096 N=4096 K=4096, time=8.5905 ms, GFLOPS=15998.87
+naive_kernel: M=4096 N=4096 K=4096, time=45.0557 ms, GFLOPS=3050.42
+smem_kernel: M=4096 N=4096 K=4096, time=25.7001 ms, GFLOPS=5347.79
+blocktiling_kernel: M=4096 N=4096 K=4096, time=13.3331 ms, GFLOPS=10308.11
+Dblocktiling_kernel: M=4096 N=4096 K=4096, time=9.5301 ms, GFLOPS=14421.62
+vectorized_kernel: M=4096 N=4096 K=4096, time=7.8122 ms, GFLOPS=17592.86
+autotune_64x64x8_8x4: M=4096 N=4096 K=4096, time=7.8112 ms, GFLOPS=17595.17
+autotune_64x64x16_8x4: M=4096 N=4096 K=4096, time=8.1720 ms, GFLOPS=16818.21
+autotune_64x64x8_8x8: M=4096 N=4096 K=4096, time=8.1920 ms, GFLOPS=16777.22
+warptile_kernel: M=4096 N=4096 K=4096, time=10.8502 ms, GFLOPS=12666.95
+warptile_vec_kernel: M=4096 N=4096 K=4096, time=7.9243 ms, GFLOPS=17343.93
+bank_conflict_kernel: M=4096 N=4096 K=4096, time=8.0408 ms, GFLOPS=17092.79
+double_buffer_kernel: M=4096 N=4096 K=4096, time=8.0588 ms, GFLOPS=17054.57

@@ -1,0 +1,8 @@
+===== GEMM 汇总: NVIDIA A800-SXM4-80GB (CC 8.0, 108 SM) =====
+时钟: default(开箱自适应boost) | 计算期~1410MHz(峰1410)
+峰值: FP32 19.5T | BF16 312T
+正确性: FP32 13P/0F, BF16 13P/0F, TC 3P/0F
+FP32 cuBLAS 16.0T | 手写最佳 17.6T
+BF16 cuBLAS 264.4T (85%峰)
+手写张量核最佳 43.0T (14%峰)
+报告: /data/env/workspace/0629/CUDA_GEMM/result/20260701_024835/00_summary.md
