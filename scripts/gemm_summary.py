@@ -63,19 +63,20 @@ def parse_bench(text):
         out.append((label, g))
     return out
 
-def find_size(prefix):
-    files = sorted(glob.glob(os.path.join(RUN_DIR, prefix + "*.log")))
-    return files
-
-# headline: 找最大尺寸的 bench 日志
-def latest_bench(kind):  # kind in fp32/bf16/tc
-    files = glob.glob(os.path.join(RUN_DIR, f"0*_bench_{kind}_*.log"))
+# headline: 逐示例日志在 bench/<engine>/<id>_<name>_<size>.log，每文件一个 kernel。取最大尺寸那组。
+BENCH_SUBDIR = {"fp32": "cuda_core_fp32", "bf16": "cuda_core_bf16", "tc": "tensor_core"}
+def latest_bench(kind):
+    d = os.path.join(RUN_DIR, "bench", BENCH_SUBDIR[kind])
+    files = glob.glob(os.path.join(d, "*.log"))
     if not files: return None, None
-    # 取尺寸最大的
     def sz(f):
         m = re.search(r'_(\d+)\.log$', f); return int(m.group(1)) if m else 0
-    f = max(files, key=sz)
-    return sz(f), parse_bench(open(f).read())
+    maxsz = max((sz(f) for f in files), default=0)
+    rows = []
+    for f in sorted(files):          # 文件名 00_/01_/… → id 顺序
+        if sz(f) != maxsz: continue
+        rows += parse_bench(open(f).read())
+    return maxsz, rows
 
 sz_fp32, fp32 = latest_bench("fp32")
 sz_bf16, bf16 = latest_bench("bf16")
@@ -88,10 +89,12 @@ def gof(rows, key):
         if key in lbl: return g
     return None
 
-# ---- 正确性 ----
-def verify_stats(name):
-    t = read(name)
-    p = len(re.findall(r'PASS', t)); f = len(re.findall(r'FAIL', t))
+# ---- 正确性（逐示例日志在 verify/<engine>/*.log）----
+def verify_stats(subdir):
+    p = f = 0
+    for fl in glob.glob(os.path.join(RUN_DIR, "verify", subdir, "*.log")):
+        t = open(fl).read()
+        p += len(re.findall(r'PASS', t)); f += len(re.findall(r'FAIL', t))
     return p, f
 
 # ---- 遥测：实测 SM(pclk) 时钟 → (计算期典型, 峰值)。按表头定位 pclk 列，排除 mclk(显存)/空闲 ----
@@ -140,7 +143,7 @@ md.append(f"- 理论峰值: FP32 = **{FP32_PEAK:.1f} TFLOPS**" + (f"  |  BF16 �
 md.append(f"- headline 尺寸: {HSZ}³\n")
 
 # 正确性
-vp32 = verify_stats("03_verify_fp32.log"); vb16 = verify_stats("04_verify_bf16.log"); vtc = verify_stats("05_verify_tc.log")
+vp32 = verify_stats("cuda_core_fp32"); vb16 = verify_stats("cuda_core_bf16"); vtc = verify_stats("tensor_core")
 md.append("## 正确性（对拍 cuBLAS）")
 md.append(f"- FP32: {vp32[0]} PASS / {vp32[1]} FAIL  |  BF16: {vb16[0]} PASS / {vb16[1]} FAIL  |  Tensor(WMMA/WGMMA): {vtc[0]} PASS / {vtc[1]} FAIL\n")
 

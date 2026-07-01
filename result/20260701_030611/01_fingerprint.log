@@ -1,0 +1,33 @@
+=== Platform Fingerprint ===
+2026-07-01T03:06:12+00:00
+--- GPU ---
+name, compute_cap, memory.total [MiB], clocks.max.sm [MHz], clocks.max.memory [MHz], power.limit [W]
+NVIDIA A800-SXM4-80GB, 8.0, 81920 MiB, 1410 MHz, 1593 MHz, 400.00 W
+Wed Jul  1 03:06:13 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 565.57.01              Driver Version: 565.57.01      CUDA Version: 12.7     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   1  NVIDIA A800-SXM4-80GB          On  |   00000000:5E:00.0 Off |                    0 |
+| N/A   30C    P0             58W /  400W |       1MiB /  81920MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+--- CUDA ---
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Fri_Feb_21_20:23:50_PST_2025
+Cuda compilation tools, release 12.8, V12.8.93
+Build cuda_12.8.r12.8/compiler.35583870_0
+--- CPU/MEM ---
+CPU(s):                          128
+Model name:                      Intel(R) Xeon(R) Platinum 8378A CPU @ 3.00GHz
+               total        used        free      shared  buff/cache   available
+Mem:           1.0Ti        35Gi       379Gi       2.0Mi       588Gi       962Gi
+--- torch ---
+torch 2.6.0+cu124 cuda 12.4
+NVIDIA A800-SXM4-80GB CC8.0 108 SM 85GB

@@ -1,3 +1,0 @@
-[tc_01 WMMA_naive] M=4096 N=4096 K=4096  time=7.7221 ms  GFLOPS=17798.05  util(vs148T)=12.0%
-[tc_02 WMMA_smem] M=4096 N=4096 K=4096  time=5.0837 ms  GFLOPS=27035.23  util(vs148T)=18.3%
-[tc_03 WMMA_pipe] M=4096 N=4096 K=4096  time=3.1935 ms  GFLOPS=43036.44  util(vs148T)=29.1%
