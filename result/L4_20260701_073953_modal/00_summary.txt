@@ -1,0 +1,8 @@
+===== GEMM 汇总: NVIDIA L4 (CC 8.9, 58 SM) =====
+时钟: default(开箱自适应boost) | 计算期~2040MHz(峰2040)
+峰值: FP32 30.3T | BF16 121T | FP8 242T
+正确性: FP32 13P/0F, BF16 13P/0F, TC 3P/0F
+FP32 cuBLAS 13.3T | 手写最佳 9.4T
+BF16 cuBLAS 83.5T (69%峰)
+手写TC(BF16)最佳 25.4T (21%峰)
+报告: /workspace/repo/result/modal_20260701_073953/00_summary.md

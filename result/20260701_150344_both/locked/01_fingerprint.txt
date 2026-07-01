@@ -1,0 +1,41 @@
+=== Platform Fingerprint ===
+2026-07-01T15:04:52+08:00
+--- GPU ---
+name, compute_cap, memory.total [MiB], clocks.max.sm [MHz], clocks.max.memory [MHz], power.limit [W]
+NVIDIA H20, 9.0, 97871 MiB, 1980 MHz, 2619 MHz, 500.00 W
+Wed Jul  1 15:04:52 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.195.03             Driver Version: 570.195.03     CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA H20                     On  |   00000000:00:03.0 Off |                    0 |
+| N/A   38C    P0            117W /  500W |       0MiB /  97871MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+--- CUDA ---
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Fri_Feb_21_20:23:50_PST_2025
+Cuda compilation tools, release 12.8, V12.8.93
+Build cuda_12.8.r12.8/compiler.35583870_0
+--- CPU/MEM ---
+CPU(s):                               24
+Model name:                           Intel(R) Xeon(R) Platinum 8469C
+CPU(s) scaling MHz:                   80%
+               total        used        free      shared  buff/cache   available
+Mem:           122Gi        13Gi        27Gi       2.1Mi        82Gi       108Gi
+--- torch ---
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/home/brooksli/.local/lib/python3.12/site-packages/torch/cuda/__init__.py", line 686, in get_device_properties
+    _lazy_init()  # will define _get_device_properties
+    ^^^^^^^^^^^^
+  File "/home/brooksli/.local/lib/python3.12/site-packages/torch/cuda/__init__.py", line 478, in _lazy_init
+    torch._C._cuda_init()
+RuntimeError: The NVIDIA driver on your system is too old (found version 12080). Please update your GPU driver by downloading and installing a new version from the URL: http://www.nvidia.com/Download/index.aspx Alternatively, go to: https://pytorch.org to install a PyTorch version that has been compiled with your version of the CUDA driver.
+torch 2.11.0+cu130 cuda 13.0

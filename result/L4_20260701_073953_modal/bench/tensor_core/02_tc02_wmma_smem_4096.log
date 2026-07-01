@@ -1,0 +1,1 @@
+[tc_02 WMMA_smem] M=4096 N=4096 K=4096  time=8.3119 ms  GFLOPS=16535.27  util(vs148T)=11.2%

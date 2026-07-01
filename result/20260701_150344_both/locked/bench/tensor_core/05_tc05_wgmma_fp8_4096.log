@@ -1,0 +1,1 @@
+[tc_05 WGMMA_fp8] M=4096 N=4096 K=4096  time=0.6080 ms  GFLOPS=226050.92  util(vs296T)=76.4%  util(vs148T)=152.7%

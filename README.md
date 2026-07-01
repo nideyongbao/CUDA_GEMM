@@ -233,10 +233,18 @@ Tensor Core 系列（每个用例一篇，含 ncu 分析）：
 
 **最终总结**（重点收敛）：[docs/13 H20 GEMM 复现总结.md](docs/h20/13%20H20%20GEMM%20复现总结.md)；**A800 迁移复现**：[docs/A800 GEMM 复现总结.md](docs/a800/A800%20GEMM%20复现总结.md)。早期逐步复现详录见 [docs/H20复现结论.md](docs/h20/H20复现结论.md)；`docs/6.1.md`–`6.5.md` 是阶段性交接文档（实验结论、性能对账、踩坑、下一步），想快速了解项目演进可从最新的 [6.5](docs/h20/6.5.md) 看起。
 
+**跨机型 / 跨代际（新）**：
+- [跨代际适配设计](docs/跨代际适配设计.md) —— 怎么统一支持 Ampere sm_86 / Ada sm_89 / Hopper sm_90 / Blackwell sm_100（arch 矩阵 + `scripts/gpu_specs.py` 单一算力真源 + 精度按 CC 门控）。
+- [FP8 利用率口径修正与 H20 结果分析](docs/h20/FP8-利用率口径修正与H20结果分析.md) —— FP8 为何要对 **FP8 峰值(296T)** 而非 BF16 峰值算利用率（否则得出 153% 的假象）。
+- [result/ 跨机型结果总表](result/README.md) —— A800-SXM / H20 / A10G / L4 横向对比。
+- [Modal 云端入口](modal/README.md) —— `GPU_TYPE=L4 uv run modal run modal/run_gemm.py`，在你没有的卡上一键跑。
+
 ---
 
 ## 当前状态与后续
 
 已覆盖 SGEMM 优化的多条主线：global naive → shared memory → register tiling → float4 coalescing → warp tiling → bank conflict 实证 → double buffering，并跨入 Tensor Core 的 WMMA → cp.async → WGMMA/TMA/warp specialization → FP8 完整阶梯。
 
-后续方向：固化更多尺寸下的 benchmark 表、针对不同 GPU 架构维护独立配置、继续完善 double buffering 与更系统的 autotuning 搜索。
+**跨代际适配已就绪**：`run_all.sh` 按 `compute_cap` 自动选 `-arch` 与张量核用例上限（Ampere/Ada 只 WMMA、Hopper 全家桶 WGMMA/FP8、Blackwell 兼容 WMMA），各卡峰值/精度支持统一由 [`scripts/gpu_specs.py`](scripts/gpu_specs.py) 一张表说了算；本地 `bash run_all.sh` 或云端 [`modal/run_gemm.py`](modal/run_gemm.py) 都能一键跑并并入 [跨机型总表](result/README.md)。
+
+后续方向：为 Ada 补 `mma.sync` 原生 FP8、为 Blackwell 补 `tcgen05`/UMMA + FP4 kernel（现只兼容跑 WMMA）；固化更多尺寸的 benchmark 表；更系统的 autotuning 搜索。

@@ -1,0 +1,1 @@
+naive_kernel: M=4096 N=4096 K=4096, time=113.7987 ms, GFLOPS=1207.74

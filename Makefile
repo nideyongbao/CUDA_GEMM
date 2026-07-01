@@ -1,11 +1,17 @@
 NVCC := nvcc
 
-# 目标硬件（可在命令行覆盖）：
-#   H20  (Hopper, CC 9.0)  默认: make            / make tc
-#   A800 (Ampere,CC 8.0)        : make ARCH=-arch=sm_80
-#                                 make tc ARCH=-arch=sm_80 TC_HOPPER=0
-# sm_90a 是 Hopper 架构专用目标（WGMMA/TMA 等 Hopper 指令需要它）。
-# 换其他卡：Ada -> sm_89，A100/A800 -> sm_80，Turing -> sm_75。
+# 目标硬件（可命令行覆盖 ARCH / TC_HOPPER；run_all.sh 会按 nvidia-smi 的 CC 自动填这两个）：
+#   代际        CC     ARCH          TC_HOPPER  张量核用例
+#   ---------   -----  ------------  ---------  --------------------------------
+#   Ampere-DC   8.0    -arch=sm_80   0          tc_01-03 (WMMA)           A100/A800
+#   Ampere-GFX  8.6    -arch=sm_86   0          tc_01-03 (WMMA)           A10/A10G/A40
+#   Ada         8.9    -arch=sm_89   0          tc_01-03 (WMMA)*          L4/L40S
+#   Hopper      9.0    -arch=sm_90a  1          tc_01-05 (WMMA+WGMMA+FP8) H20/H100/H200  ← 默认
+#   Blackwell   10/12  -arch=sm_100  0          tc_01-03 (WMMA)**         B200/RTX50
+#   * Ada 有 FP8 硬件，但本仓库 FP8 走 Hopper 独占的 WGMMA 指令，故 Ada 上只跑 WMMA。
+#   ** Blackwell 的 WGMMA 换成了 tcgen05/UMMA、并新增 FP4——需另写 kernel，暂只跑通用 WMMA。
+# sm_90a 的 'a' = architecture-specific：WGMMA/TMA 等 Hopper 指令**必须**用它(不能用 sm_90)。
+# 各卡的峰值/精度支持是 scripts/gpu_specs.py 这一份表说了算(汇总报告算 MFU 用它)。
 ARCH ?= -arch=sm_90a
 INCLUDES := -I include
 OPT := -O3

@@ -1,0 +1,7 @@
+===== GEMM 汇总: NVIDIA H20 (CC 9.0, None SM) =====
+时钟: default(开箱自适应boost) | 计算期~1980MHz(峰1980)
+正确性: FP32 13P/0F, BF16 13P/0F, TC 5P/0F
+FP32 cuBLAS 30.3T | 手写最佳 25.1T
+BF16 cuBLAS 132.1T (89%峰)
+手写张量核最佳 224.2T (151%峰)
+报告: /shard_data/brooksli/workspace/0625/CUDA_MATMUAL/result/20260701_150344_both/default/00_summary.md

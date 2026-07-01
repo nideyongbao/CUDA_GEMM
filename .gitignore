@@ -12,6 +12,13 @@ result/latest
 result/**/*.ncu-rep
 result/**/*.run.log
 
+# Python 缓存（scripts/gpu_specs.py 被 import 时产生）
+__pycache__/
+*.pyc
+
+# Modal 本地拉取的跨机型结果（体积可能较大，按需入库精选）
+result/**/*_modal/**/*.ncu-rep
+
 # 编辑器/系统
 .vscode/
 .cache/

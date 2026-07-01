@@ -1,0 +1,1 @@
+vectorized             M=4096 N=4096 K=4096  time=6.2904 ms  GFLOPS=21849.12  util(vs148T)=14.8%

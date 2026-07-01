@@ -1,0 +1,8 @@
+===== GEMM 汇总: NVIDIA A10 (CC 8.6, 72 SM) =====
+时钟: default(开箱自适应boost) | 计算期~1695MHz(峰1695)
+峰值: FP32 31.2T | BF16 125T
+正确性: FP32 13P/0F, BF16 13P/0F, TC 3P/0F
+FP32 cuBLAS 14.1T | 手写最佳 11.7T
+BF16 cuBLAS 92.7T (74%峰)
+手写TC(BF16)最佳 25.1T (20%峰)
+报告: /workspace/repo/result/modal_20260701_074243/00_summary.md

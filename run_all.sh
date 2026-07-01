@@ -122,12 +122,22 @@ GPU_NAME=$(nvidia-smi -i "$GPU" --query-gpu=name --format=csv,noheader 2>/dev/nu
 MAXCLK=$(nvidia-smi -i "$GPU" --query-gpu=clocks.max.sm --format=csv,noheader 2>/dev/null | grep -oE '[0-9]+' | head -1)
 [ -z "$CC" ] && { echo "错误: 无法读取 GPU $GPU 的 compute_cap"; exit 1; }
 MAJOR=${CC%.*}; MINOR=${CC#*.}
-case "$MAJOR" in
-  9)          SM_ARCH="sm_90a"; TC_HOPPER=1 ;;
-  10|11|12)   SM_ARCH="sm_${MAJOR}${MINOR}"; TC_HOPPER=0 ;;
-  *)          SM_ARCH="sm_${MAJOR}${MINOR}"; TC_HOPPER=0 ;;
+# ---------------------------------------------------------------------------
+# 架构自适应矩阵（CC → 编译目标 + 张量核用例上限）。设备算力/精度支持的唯一真源是
+# scripts/gpu_specs.py（BF16/FP8/FP4 峰值按 CC 门控）；这里只决定「编什么、跑到第几级」。
+#   张量核阶梯：tc_01-03 = WMMA(bf16 输入，sm_80+ 通用)；tc_04 = WGMMA+TMA、tc_05 = FP8 WGMMA
+#              （tc_04/05 是 Hopper sm_90 独占指令，靠 TC_HOPPER=1 打开、-DNO_HOPPER 关闭）。
+#   TC_MAX = 本机能跑到的最高张量核用例 id（0 表示跳过张量核）。
+# 换代际只改这张表 + gpu_specs.py，kernel 源码零改动。
+# ---------------------------------------------------------------------------
+case "${MAJOR}.${MINOR}" in
+  7.*)             SM_ARCH="sm_${MAJOR}${MINOR}"; TC_HOPPER=0; TC_MAX=0 ;;  # Volta/Turing：无 bf16 WMMA → 跳过张量核(只跑 CUDA core)
+  8.0)             SM_ARCH="sm_80";               TC_HOPPER=0; TC_MAX=3 ;;  # Ampere 数据中心 A100/A800
+  8.6|8.7|8.9)     SM_ARCH="sm_${MAJOR}${MINOR}"; TC_HOPPER=0; TC_MAX=3 ;;  # Ampere 图形 A10/A10G/A40 · Ada L4/L40S(有 FP8 硬件，但本仓库 FP8 走 Hopper WGMMA → 只 WMMA)
+  9.*)             SM_ARCH="sm_90a";              TC_HOPPER=1; TC_MAX=5 ;;  # Hopper H100/H200/H20：WGMMA+TMA+FP8 全家桶
+  10.*|11.*|12.*)  SM_ARCH="sm_${MAJOR}${MINOR}"; TC_HOPPER=0; TC_MAX=3 ;;  # Blackwell B200/RTX50：WMMA 可用；UMMA/FP4 需新 kernel(未写) → 暂只 WMMA
+  *)               SM_ARCH="sm_${MAJOR}${MINOR}"; TC_HOPPER=0; TC_MAX=3 ;;  # 未知新架构兜底：按通用 WMMA
 esac
-[ "$TC_HOPPER" = 1 ] && TC_MAX=5 || TC_MAX=3
 export CUDA_VISIBLE_DEVICES="$GPU"
 log ""
 log " GPU: $GPU_NAME | CC $CC → ARCH=-arch=$SM_ARCH TC_HOPPER=$TC_HOPPER (tensor 1-$TC_MAX) | max ${MAXCLK:-?}MHz"
@@ -174,8 +184,13 @@ run_test "01_fingerprint" "cat ${RUN_DIR}/01_fingerprint.txt"
 # ---------------------------------------------------------------------------
 # out-of-source 构建：产物进 result/<ts>/build/，代码目录 kernels/ 保持干净
 BDIR="${RUN_DIR}/build"
-run_test "02_build" "make clean BUILD='$BDIR'; make ARCH=-arch=$SM_ARCH BUILD='$BDIR' -j$JOBS && make tc ARCH=-arch=$SM_ARCH TC_HOPPER=$TC_HOPPER BUILD='$BDIR' -j$JOBS"
-[ -x "$BDIR/cuda_core/bench" ] && [ -x "$BDIR/tensor_core/bench" ] || { echo "错误: 编译失败，见 ${RUN_DIR}/02_build.log"; tail -20 "${RUN_DIR}/02_build.log"; exit 1; }
+# 张量核目标只在本机支持时才编（TC_MAX=0 的 Volta/Turing 跳过，避免 bf16 WMMA 编译失败拖垮整轮）
+BUILD_TC=""; [ "${TC_MAX:-0}" -gt 0 ] && BUILD_TC="&& make tc ARCH=-arch=$SM_ARCH TC_HOPPER=$TC_HOPPER BUILD='$BDIR' -j$JOBS"
+run_test "02_build" "make clean BUILD='$BDIR'; make ARCH=-arch=$SM_ARCH BUILD='$BDIR' -j$JOBS $BUILD_TC"
+[ -x "$BDIR/cuda_core/bench" ] || { echo "错误: CUDA core 编译失败，见 ${RUN_DIR}/02_build.log"; tail -20 "${RUN_DIR}/02_build.log"; exit 1; }
+if [ "${TC_MAX:-0}" -gt 0 ] && [ ! -x "$BDIR/tensor_core/bench" ]; then
+  echo "错误: 张量核编译失败，见 ${RUN_DIR}/02_build.log"; tail -20 "${RUN_DIR}/02_build.log"; exit 1
+fi
 CC_B="$BDIR/cuda_core/bench"; CC_V="$BDIR/cuda_core/verify"
 BF_B="$BDIR/cuda_core/bench_bf16"; BF_V="$BDIR/cuda_core/verify_bf16"
 TC_B="$BDIR/tensor_core/bench"; TC_V="$BDIR/tensor_core/verify"

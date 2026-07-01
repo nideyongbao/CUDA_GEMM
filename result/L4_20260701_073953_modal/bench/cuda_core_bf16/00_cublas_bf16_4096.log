@@ -1,0 +1,1 @@
+cublas_bf16            M=4096 N=4096 K=4096  time=1.6458 ms  GFLOPS=83510.29  util(vs148T)=56.4%

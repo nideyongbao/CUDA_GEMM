@@ -44,11 +44,12 @@
 | double_buffer | 17257 |   5.5% |   6.5% |
 
 ## Tensor Core @ 4096³
-| 用例 | GFLOPS | %BF16峰值 | %cuBLAS_bf16 |
-| --- | ---: | ---: | ---: |
-| tc_01 WMMA_naive | 17798 |   5.7% |   6.7% |
-| tc_02 WMMA_smem | 27027 |   8.7% |  10.2% |
-| tc_03 WMMA_pipe | 43053 |  13.8% |  16.3% |
+> 利用率口径：WMMA/WGMMA(bf16)→BF16 峰值；FP8→FP8 峰值(=2×BF16)；FP4→FP4 峰值(=4×BF16)。
+| 用例 | 精度 | GFLOPS | %对应精度峰值 | %cuBLAS_bf16 |
+| --- | --- | ---: | ---: | ---: |
+| tc_01 WMMA_naive | BF16 | 17798 |   5.7% |   6.7% |
+| tc_02 WMMA_smem | BF16 | 27027 |   8.7% |  10.2% |
+| tc_03 WMMA_pipe | BF16 | 43053 |  13.8% |  16.3% |
 
 ## 尺寸缩放
 ```
@@ -78,6 +79,6 @@
 - FP32 cuBLAS: **19.0 TFLOPS**（98% 峰值）
 - FP32 手写最佳: **17.6 TFLOPS**（93% cuBLAS）
 - BF16 cuBLAS: **264.7 TFLOPS**（85% BF16峰值）
-- 手写张量核最佳: **43.1 TFLOPS**（14% BF16峰值）
+- 手写张量核最佳(BF16 路径): **43.1 TFLOPS**（14% BF16峰值）
 
 > 时钟提示：GFLOPS 随实际 SM 时钟线性变化。本轮时钟策略=locked@1410MHz(额定boost)，实测计算期约 1410 MHz(峰 1410)。跨机型/跨轮对比 MFU 时务必统一时钟策略（`--lock` 锁额定频最可复现）。

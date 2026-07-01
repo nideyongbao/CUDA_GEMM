@@ -1,0 +1,1 @@
+bank_conflict_kernel: M=4096 N=4096 K=4096, time=6.3925 ms, GFLOPS=21500.14

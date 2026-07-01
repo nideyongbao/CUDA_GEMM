@@ -4,5 +4,5 @@
 正确性: FP32 13P/0F, BF16 13P/0F, TC 3P/0F
 FP32 cuBLAS 16.0T | 手写最佳 17.6T
 BF16 cuBLAS 264.5T (85%峰)
-手写张量核最佳 43.0T (14%峰)
-报告: /data/env/workspace/0629/CUDA_GEMM/result/20260701_065155_both/default/00_summary.md
+手写TC(BF16)最佳 43.0T (14%峰)
+报告: result/20260701_065155_both/default/00_summary.md

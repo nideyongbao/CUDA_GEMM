@@ -1,0 +1,1 @@
+autotune_64x64x16_8x4  M=4096 N=4096 K=4096  time=10.9711 ms  GFLOPS=12527.32  util(vs148T)=8.5%

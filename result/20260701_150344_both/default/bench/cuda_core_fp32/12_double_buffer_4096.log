@@ -1,0 +1,1 @@
+double_buffer_kernel: M=4096 N=4096 K=4096, time=5.4686 ms, GFLOPS=25132.33

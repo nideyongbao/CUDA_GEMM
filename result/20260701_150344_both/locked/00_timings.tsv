@@ -1,0 +1,13 @@
+test	seconds	status
+01_fingerprint	0	ok
+02_build	7	ok
+03_verify_fp32	10	ok
+04_verify_bf16	8	ok
+05_verify_tc	4	ok
+06_bench_fp32_4096	9	ok
+07_bench_bf16_4096	8	ok
+08_bench_tc_4096	5	ok
+09_scaling	14	ok
+10_autotune	0	ok
+99_summary	2	ok
+TOTAL	67	ok

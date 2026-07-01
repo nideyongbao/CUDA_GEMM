@@ -1,0 +1,1 @@
+[tc_05 WGMMA_fp8] VERIFY(512^3, vs CPU double) max_abs=2.927e-02 bad=0/262144  PASS

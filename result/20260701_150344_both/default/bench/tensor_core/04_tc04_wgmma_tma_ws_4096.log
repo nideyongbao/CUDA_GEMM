@@ -1,0 +1,2 @@
+[tc_04 WGMMA] M=4096 N=4096 K=4096  time=1.1518 ms  GFLOPS=119321.72  util(vs148T)=80.6%
+[tc_04 cuBLAS BF16 fair] M=4096 N=4096 K=4096  time=1.0424 ms  GFLOPS=131850.19  util(vs148T)=89.1%

@@ -2,7 +2,9 @@
 # ============================================================================
 # 解析 run_all.sh 的日志，结合设备算力，生成机型 GEMM 汇总报告（00_summary.md/.txt）。
 # 用法: gemm_summary.py <RUN_DIR> <GPU_NAME> <CC> <CLOCK_POLICY> <MAXCLK_MHz>
-# 口径：GFLOPS 原始值 + 对 FP32 理论峰值 + 对 cuBLAS(库基线) + 对 BF16 张量核峰值(MFU)。
+# 口径：GFLOPS 原始值 + 对 FP32 理论峰值 + 对 cuBLAS(库基线) + 对「对应精度」张量核峰值(MFU)。
+#   张量核每个用例按其精度选峰值：WMMA/WGMMA(bf16)→BF16 峰值；FP8→FP8 峰值(=2×BF16)；
+#   FP4→FP4 峰值(=4×BF16)。峰值/SM 数等设备事实统一来自 scripts/gpu_specs.py。
 # ============================================================================
 import sys, os, re, glob
 
@@ -12,37 +14,24 @@ CC = sys.argv[3] if len(sys.argv) > 3 else "?"
 CLOCK_POLICY = sys.argv[4] if len(sys.argv) > 4 else "default"
 MAXCLK = float(sys.argv[5]) if len(sys.argv) > 5 and sys.argv[5] not in ("", "0") else None
 
-# ---- 设备算力 ----
+# ---- 设备算力：唯一事实表在 scripts/gpu_specs.py（BF16 峰值/SM 数；FP8=2×、FP4=4× 按 CC 推导）----
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gpu_specs as G
+
 def sm_count():
+    """优先 torch 实测 SM 数；torch 与驱动版本不匹配时(本机常见)退回 gpu_specs 兜底表。"""
     try:
         import torch
         return torch.cuda.get_device_properties(0).multi_processor_count
     except Exception:
-        return None
-
-def fp32_cores_per_sm(cc):
-    major, minor = (int(x) for x in cc.split("."))
-    if (major, minor) == (8, 0): return 64      # GA100 (A100/A800)
-    if major == 7: return 64                      # Volta/Turing
-    return 128                                     # GA10x/AD10x/GH100/Blackwell
-
-# BF16 张量核 dense 峰值 (TFLOPS, FP32 累加, 无稀疏)。按名字子串匹配；未知→None(只对 cuBLAS)。
-BF16_PEAK = [
-    ("A800", 312), ("A100", 312), ("A30", 165), ("A40", 149), ("A10", 125),
-    ("H20", 148), ("H200", 989), ("H800", 989), ("H100", 989), ("GH200", 989),
-    ("L40S", 362), ("L40", 181), ("L4", 121),
-    ("B200", 2250), ("GB200", 2450), ("5090", 419), ("4090", 165), ("V100", 0),
-]
-def bf16_peak(name):
-    for k, v in BF16_PEAK:
-        if k.lower() in name.lower():
-            return v if v > 0 else None
-    return None
+        return G.sm_count(GPU_NAME)
 
 SM = sm_count()
-CORES = fp32_cores_per_sm(CC)
-FP32_PEAK = (SM * CORES * 2 * MAXCLK / 1e6) if (SM and MAXCLK) else None   # TFLOPS @ rated max clock
-BF16_PK = bf16_peak(GPU_NAME)
+CORES = G.fp32_cores_per_sm(CC)
+FP32_PEAK = G.fp32_peak_tflops(GPU_NAME, CC, MAXCLK, SM)   # TFLOPS @ 额定 max clock
+BF16_PK = G.bf16_peak_tflops(GPU_NAME)
+FP8_PK  = G.fp8_peak_tflops(GPU_NAME, CC)                  # None if 该代际无 FP8(Ampere)
+FP4_PK  = G.fp4_peak_tflops(GPU_NAME, CC)                  # None if 非 Blackwell
 
 # ---- 解析日志 ----
 def read(name):
@@ -139,7 +128,13 @@ md.append(f"- 计算能力: **CC {CC}**  |  SM 数: {SM}  |  FP32 核/SM: {CORES
 md.append(f"- 时钟策略: **{CLOCK_POLICY}**（额定 max {int(MAXCLK) if MAXCLK else '?'} MHz）")
 cr = clock_range()
 if cr: md.append(f"- 运行时实测 SM 时钟(遥测 pclk): 计算期典型 **{cr[0]} MHz** / 峰 {cr[1]} MHz（额定 {int(MAXCLK) if MAXCLK else '?'}）")
-md.append(f"- 理论峰值: FP32 = **{FP32_PEAK:.1f} TFLOPS**" + (f"  |  BF16 张量核 = **{BF16_PK} TFLOPS**" if BF16_PK else "  |  BF16 峰值=未知(按 cuBLAS 为基线)") if FP32_PEAK else "- 理论峰值: 未知")
+peak_bits = []
+if FP32_PEAK: peak_bits.append(f"FP32 = **{FP32_PEAK:.1f} TFLOPS**")
+if BF16_PK:   peak_bits.append(f"BF16 张量核 = **{BF16_PK:.0f} TFLOPS**")
+if FP8_PK:    peak_bits.append(f"FP8 张量核 = **{FP8_PK:.0f} TFLOPS**")
+if FP4_PK:    peak_bits.append(f"FP4 张量核 = **{FP4_PK:.0f} TFLOPS**")
+md.append("- 理论峰值: " + ("  |  ".join(peak_bits) if peak_bits else "未知")
+          + ("" if BF16_PK else "（BF16 峰值未知，张量核只以 cuBLAS 为基线）"))
 md.append(f"- headline 尺寸: {HSZ}³\n")
 
 # 正确性
@@ -168,15 +163,17 @@ if bf16:
         else: md.append(f"| {lbl} | {g:.0f} | {cub} |")
     md.append("")
 
-# WMMA/Tensor 表
+# WMMA/Tensor 表：每个用例按其精度选峰值——FP8 用例对 FP8 峰值(=2×BF16)算利用率，
+# 不能套 BF16 峰值(否则 226T/148T 会算出 >150% 的"超过物理峰值"假象)。
 if tc:
     md.append(f"## Tensor Core @ {sz_tc}³")
-    hdr = "| 用例 | GFLOPS | %BF16峰值 | %cuBLAS_bf16 |" if BF16_PK else "| 用例 | GFLOPS | %cuBLAS_bf16 |"
-    md.append(hdr); md.append("| --- | ---: | ---: | ---: |" if BF16_PK else "| --- | ---: | ---: |")
+    md.append("> 利用率口径：WMMA/WGMMA(bf16)→BF16 峰值；FP8→FP8 峰值(=2×BF16)；FP4→FP4 峰值(=4×BF16)。")
+    md.append("| 用例 | 精度 | GFLOPS | %对应精度峰值 | %cuBLAS_bf16 |")
+    md.append("| --- | --- | ---: | ---: | ---: |")
     for lbl, g in tc:
+        peak, prec = G.peak_for_label(lbl, GPU_NAME, CC)
         cub = f"{g/cublas_bf16*100:5.1f}%" if cublas_bf16 else "-"
-        if BF16_PK: md.append(f"| {lbl} | {g:.0f} | {pct(g, BF16_PK)} | {cub} |")
-        else: md.append(f"| {lbl} | {g:.0f} | {cub} |")
+        md.append(f"| {lbl} | {prec} | {g:.0f} | {pct(g, peak)} | {cub} |")
     md.append("")
 
 # 缩放
@@ -188,11 +185,16 @@ if scal.strip():
 # 关键结论
 md.append("## 关键数字")
 best_fp32 = max((g for l,g in fp32 if "cublas" not in l), default=None) if fp32 else None
-best_tc = max((g for _,g in tc), default=None) if tc else None
+# 张量核分精度各取「手写」最佳(排除内嵌的 cuBLAS fair 参考行)：BF16 路径 vs FP8 路径，各对自己峰值
+tc_bf16 = [(l,g) for l,g in tc if "fp8" not in l.lower() and "fp4" not in l.lower() and "cublas" not in l.lower()] if tc else []
+tc_fp8  = [(l,g) for l,g in tc if "fp8" in l.lower() and "cublas" not in l.lower()] if tc else []
+best_tc_bf16 = max((g for _,g in tc_bf16), default=None)
+best_tc_fp8  = max((g for _,g in tc_fp8),  default=None)
 if cublas_fp32: md.append(f"- FP32 cuBLAS: **{cublas_fp32/1000:.1f} TFLOPS**" + (f"（{cublas_fp32/(FP32_PEAK*1000)*100:.0f}% 峰值）" if FP32_PEAK else ""))
 if best_fp32: md.append(f"- FP32 手写最佳: **{best_fp32/1000:.1f} TFLOPS**" + (f"（{best_fp32/cublas_fp32*100:.0f}% cuBLAS）" if cublas_fp32 else ""))
 if cublas_bf16: md.append(f"- BF16 cuBLAS: **{cublas_bf16/1000:.1f} TFLOPS**" + (f"（{cublas_bf16/(BF16_PK*1000)*100:.0f}% BF16峰值）" if BF16_PK else ""))
-if best_tc: md.append(f"- 手写张量核最佳: **{best_tc/1000:.1f} TFLOPS**" + (f"（{best_tc/(BF16_PK*1000)*100:.0f}% BF16峰值）" if BF16_PK else ""))
+if best_tc_bf16: md.append(f"- 手写张量核最佳(BF16 路径): **{best_tc_bf16/1000:.1f} TFLOPS**" + (f"（{best_tc_bf16/(BF16_PK*1000)*100:.0f}% BF16峰值）" if BF16_PK else ""))
+if best_tc_fp8: md.append(f"- 手写张量核最佳(FP8 路径): **{best_tc_fp8/1000:.1f} TFLOPS**" + (f"（{best_tc_fp8/(FP8_PK*1000)*100:.0f}% FP8峰值；≈{best_tc_fp8/(BF16_PK*1000)*100:.0f}% BF16峰值，因 FP8 吞吐是 BF16 的 2×）" if (FP8_PK and BF16_PK) else ""))
 md.append("")
 md.append(f"> 时钟提示：GFLOPS 随实际 SM 时钟线性变化。本轮时钟策略={CLOCK_POLICY}"
           + (f"，实测计算期约 {cr[0]} MHz(峰 {cr[1]})" if cr else "")
@@ -205,11 +207,12 @@ open(os.path.join(RUN_DIR, "00_summary.md"), "w").write(md_text)
 txt = []
 txt.append(f"===== GEMM 汇总: {GPU_NAME} (CC {CC}, {SM} SM) =====")
 txt.append(f"时钟: {CLOCK_POLICY}" + (f" | 计算期~{cr[0]}MHz(峰{cr[1]})" if cr else ""))
-if FP32_PEAK: txt.append(f"峰值: FP32 {FP32_PEAK:.1f}T" + (f" | BF16 {BF16_PK}T" if BF16_PK else ""))
+if FP32_PEAK: txt.append(f"峰值: FP32 {FP32_PEAK:.1f}T" + (f" | BF16 {BF16_PK:.0f}T" if BF16_PK else "") + (f" | FP8 {FP8_PK:.0f}T" if FP8_PK else ""))
 txt.append(f"正确性: FP32 {vp32[0]}P/{vp32[1]}F, BF16 {vb16[0]}P/{vb16[1]}F, TC {vtc[0]}P/{vtc[1]}F")
 if cublas_fp32: txt.append(f"FP32 cuBLAS {cublas_fp32/1000:.1f}T | 手写最佳 {best_fp32/1000:.1f}T" if best_fp32 else f"FP32 cuBLAS {cublas_fp32/1000:.1f}T")
 if cublas_bf16: txt.append(f"BF16 cuBLAS {cublas_bf16/1000:.1f}T" + (f" ({cublas_bf16/(BF16_PK*1000)*100:.0f}%峰)" if BF16_PK else ""))
-if best_tc: txt.append(f"手写张量核最佳 {best_tc/1000:.1f}T" + (f" ({best_tc/(BF16_PK*1000)*100:.0f}%峰)" if BF16_PK else ""))
+if best_tc_bf16: txt.append(f"手写TC(BF16)最佳 {best_tc_bf16/1000:.1f}T" + (f" ({best_tc_bf16/(BF16_PK*1000)*100:.0f}%峰)" if BF16_PK else ""))
+if best_tc_fp8: txt.append(f"手写TC(FP8)最佳 {best_tc_fp8/1000:.1f}T" + (f" ({best_tc_fp8/(FP8_PK*1000)*100:.0f}%FP8峰)" if FP8_PK else ""))
 txt.append(f"报告: {os.path.join(RUN_DIR,'00_summary.md')}")
 txt_text = "\n".join(txt)
 open(os.path.join(RUN_DIR, "00_summary.txt"), "w").write(txt_text + "\n")

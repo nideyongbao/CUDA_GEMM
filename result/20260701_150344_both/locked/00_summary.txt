@@ -1,0 +1,9 @@
+===== GEMM 汇总: NVIDIA H20 (CC 9.0, 78 SM) =====
+时钟: locked@1980MHz(额定boost) | 计算期~1830MHz(峰1830)
+峰值: FP32 39.5T | BF16 148T | FP8 296T
+正确性: FP32 13P/0F, BF16 13P/0F, TC 5P/0F
+FP32 cuBLAS 28.0T | 手写最佳 23.2T
+BF16 cuBLAS 134.0T (91%峰)
+手写TC(BF16)最佳 120.6T (82%峰)
+手写TC(FP8)最佳 226.1T (76%FP8峰)
+报告: result/20260701_150344_both/locked/00_summary.md

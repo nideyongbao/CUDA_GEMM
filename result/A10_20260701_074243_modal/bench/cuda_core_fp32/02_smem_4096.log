@@ -1,0 +1,1 @@
+smem_kernel: M=4096 N=4096 K=4096, time=65.1510 ms, GFLOPS=2109.55
