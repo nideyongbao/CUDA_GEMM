@@ -3,7 +3,7 @@
      Built from algorithmic-art skill's viewer.html template (sibling of cuda_core_optimization_ladder.html):
        KEPT  : Anthropic branding (colors/fonts/gradient), sidebar structure, seed controls, action buttons, self-contained single artifact.
        VARIED: the p5.js algorithm (7 animated Tensor-Core scenes), parameters, UI controls — per the Asynchronous Cathedral philosophy.
-     All numbers are real NVIDIA H20 (Hopper, CC 9.0) measurements from this repo's docs/08-13 and profiling/tensor_core/. -->
+     All numbers are real NVIDIA H20 (Hopper, CC 9.0) measurements from this repo's docs/08-13 and baselines/tensor_core/. -->
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -186,7 +186,7 @@ pre.algo .cm{color:#9a9488;} pre.algo .hl{color:#b79be0;} pre.algo .kw{color:#7f
 <script>
 // ════════════════════════════════════════════════════════════════════════
 //  STAGE DATA — all metrics are real H20 measurements
-//  (sources: repo docs/08–13, profiling/throughput_4096.txt, profiling/tensor_core/SUMMARY.md)
+//  (sources: repo docs/08–13, baselines/throughput_4096.txt, ../h20/ncu-tensor_core.md)
 //  GFLOPS = headline @4096³; ncu metrics (cyc/issue, SM Busy, occ, L1/TEX) = @2048³ (--set full)
 // ════════════════════════════════════════════════════════════════════════
 const BF16_PEAK=148000, FP8_PEAK=296000, FP32_PEAK=44000;   // TFLOPS×1000

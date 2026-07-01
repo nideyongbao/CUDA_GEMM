@@ -56,4 +56,4 @@ cp.async 多级流水线把搬运/计算重叠，4096³ 下把手写 WMMA 从 20
 
 要再上一个数量级，必须换 Hopper 原生指令：warpgroup 级、操作数直接吃 smem、彻底异步的 **WGMMA + TMA**（见 [11 tensor core - WGMMA TMA warp specialization](11%20tensor%20core%20-%20WGMMA%20TMA%20warp%20specialization.md)）。
 
-> 本文 ncu 原始分项输出见 `profiling/tensor_core/doc_raw/tc_03_wmma_pipe.txt`（与 cuda_core 的 doc_raw 对称，可由 `profiling/tensor_core/collect_doc_ncu.sh` 复跑）。
+> 本文 ncu 原始分项输出见 `baselines/tensor_core/doc_raw/tc_03_wmma_pipe.txt`（与 cuda_core 的 doc_raw 对称，可由 `baselines/tensor_core/collect_doc_ncu.sh` 复跑）。

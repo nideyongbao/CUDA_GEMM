@@ -3,16 +3,14 @@
 *.o
 build/
 
-# Nsight 报告（大二进制；文本 details/SUMMARY 保留入库）
-#*.ncu-rep
-#*.nsys-rep
-profiling/**/*.run.log
-# A800 ncu 二进制本地生成；文本 details/SUMMARY 已入库
-profiling/a800/*.ncu-rep
+# Nsight 报告（H20 参考基线的 .ncu-rep 保留入库；A800 的本地生成，只留 details.txt 文本）
+baselines/**/*.run.log
+baselines/a800/*.ncu-rep
 
 # run_all.sh 结果：保留每次执行日志(.log/.txt/.md/.tsv/遥测)，只忽略移动软链与 ncu 二进制
 result/latest
 result/**/*.ncu-rep
+result/**/*.run.log
 
 # 编辑器/系统
 .vscode/

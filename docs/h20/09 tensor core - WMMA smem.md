@@ -53,4 +53,4 @@ smem staging 是 tensor core 阶梯上最划算的一步：warp cyc/issue 109→
 
 但还没到头：load_matrix(smem→寄存器) + 同步 `__syncthreads` 让张量核仍有空档。下一步用 **cp.async 把搬运和计算重叠**（见 [10 tensor core - WMMA cp.async pipeline](10%20tensor%20core%20-%20WMMA%20cp.async%20pipeline.md)）。
 
-> 本文 ncu 原始分项输出见 `profiling/tensor_core/doc_raw/tc_02_wmma_smem.txt`（与 cuda_core 的 doc_raw 对称，可由 `profiling/tensor_core/collect_doc_ncu.sh` 复跑）。
+> 本文 ncu 原始分项输出见 `baselines/tensor_core/doc_raw/tc_02_wmma_smem.txt`（与 cuda_core 的 doc_raw 对称，可由 `baselines/tensor_core/collect_doc_ncu.sh` 复跑）。

@@ -3,7 +3,7 @@
      Built from algorithmic-art skill's viewer.html template:
        KEPT  : Anthropic branding (colors/fonts/gradient), sidebar structure, seed controls, action buttons, self-contained single artifact.
        VARIED: the p5.js algorithm (10 animated GPU-optimization scenes), parameters, and UI controls — per the Latency Cartography philosophy.
-     All numbers are real NVIDIA H20 (Hopper, CC 9.0) measurements from this repo's docs/ and profiling/. -->
+     All numbers are real NVIDIA H20 (Hopper, CC 9.0) measurements from this repo's docs/ and baselines/. -->
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -199,7 +199,7 @@ pre.algo .cm{color:#9a9488;} pre.algo .hl{color:var(--anthropic-orange);} pre.al
 <script>
 // ════════════════════════════════════════════════════════════════════════
 //  STAGE DATA — content is data-driven; all metrics are real H20 measurements
-//  (sources: repo docs/02–07, docs/13, profiling/throughput_4096.txt, SUMMARY.md)
+//  (sources: repo docs/02–07, docs/13, baselines/throughput_4096.txt, SUMMARY.md)
 // ════════════════════════════════════════════════════════════════════════
 const CUBLAS = 30266;            // cuBLAS SGEMM @4096^3, GFLOPS (the yardstick)
 const PEAK   = 44000;            // ~FP32 peak TFLOPS on H20

@@ -72,4 +72,4 @@ cuBLAS BF16 (fair) time=1.0426 ms  GFLOPS=131820  util(vs148T)=89.1%
 
 同样这套流水线换成 FP8 只需改极少代码、吞吐翻倍（见 [12 tensor core - FP8 WGMMA](12%20tensor%20core%20-%20FP8%20WGMMA.md)）。再往上（追平/超过 cuBLAS）要的是 persistent kernel + tile scheduler、cluster/DSMEM、自写 swizzle 等。
 
-> 本文 ncu 原始分项输出见 `profiling/tensor_core/doc_raw/tc_04_wgmma_tma_ws.txt`（与 cuda_core 的 doc_raw 对称，可由 `profiling/tensor_core/collect_doc_ncu.sh` 复跑）。
+> 本文 ncu 原始分项输出见 `baselines/tensor_core/doc_raw/tc_04_wgmma_tma_ws.txt`（与 cuda_core 的 doc_raw 对称，可由 `baselines/tensor_core/collect_doc_ncu.sh` 复跑）。

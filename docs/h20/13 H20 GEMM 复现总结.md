@@ -24,10 +24,10 @@ kernels/
     tc_01_wmma_naive … tc_05_wgmma_fp8(.cu)        (WMMA→WGMMA→FP8 用例，kernel-only)
     bench/verify(.cu) + tc_cases.h                 (统一 id 1-5 派发驱动)
 include/    共享头(common.h/kernels.h/bf16.h/06_autotuning.cuh/tc_common.cuh)
-profiling/  性能分析，按路线分目录：cuda_core/ + tensor_core/，各含 run_ncu.sh + SUMMARY.md + ncu 报告
+baselines/  性能分析，按路线分目录：cuda_core/ + tensor_core/，各含 run_ncu.sh + SUMMARY.md + ncu 报告
 docs/       00–07 CUDA core 分析；08–12 Tensor core 分析；13 本总结
 ```
-构建：`make`（FP32 + BF16 sweep，产物 `kernels/cuda_core/{bench,verify,bench_bf16,verify_bf16}`）、`make tc`（产物 `kernels/tensor_core/{bench,verify}`，id 1-5）。两条线对称：**`kernels/<route>/` 放代码、`profiling/<route>/` 放性能分析**。
+构建：`make`（FP32 + BF16 sweep，产物 `kernels/cuda_core/{bench,verify,bench_bf16,verify_bf16}`）、`make tc`（产物 `kernels/tensor_core/{bench,verify}`，id 1-5）。两条线对称：**`kernels/<route>/` 放代码、`baselines/<route>/` 放性能分析**。
 
 ## 3、完整性能阶梯（4096³，best-of）
 
@@ -59,7 +59,7 @@ docs/       00–07 CUDA core 分析；08–12 Tensor core 分析；13 本总结
 
 规模放大（WGMMA 越大越高）：BF16 8192³ **88.1%**；FP8 8192³ **84.8% /296T（251 TFLOPS）**。
 
-## 4、ncu 关键洞察（详见 profiling/tensor_core/SUMMARY.md 与 docs 08–12）
+## 4、ncu 关键洞察（详见 ncu-tensor_core.md 与 docs 08–12）
 
 把 warp 级 WMMA 和 warpgroup 级 WGMMA 摆在一起，差别一目了然：
 

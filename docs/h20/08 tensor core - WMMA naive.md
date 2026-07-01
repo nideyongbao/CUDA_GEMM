@@ -60,4 +60,4 @@ WMMA 让我们第一次用上 Tensor Core，但朴素地从 global 取 fragment 
 
 这正好引出和 CUDA core 完全相同的下一步——**把 tile 搬进 shared memory 复用**（见 [09 tensor core - WMMA smem](09%20tensor%20core%20-%20WMMA%20smem.md)）：用 Tensor Core 是必要的，但远不充分。
 
-> 本文 ncu 原始分项输出见 `profiling/tensor_core/doc_raw/tc_01_wmma_naive.txt`（与 cuda_core 的 doc_raw 对称，可由 `profiling/tensor_core/collect_doc_ncu.sh` 复跑）。
+> 本文 ncu 原始分项输出见 `baselines/tensor_core/doc_raw/tc_01_wmma_naive.txt`（与 cuda_core 的 doc_raw 对称，可由 `baselines/tensor_core/collect_doc_ncu.sh` 复跑）。

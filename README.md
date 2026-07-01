@@ -76,7 +76,7 @@ include/          公共宏、FP32/BF16 声明、autotuning 模板、tensor core
 scripts/          工具：gemm_summary.py（汇总报告生成器）
 build/            【产物】make 输出的 .o 与可执行(bench/verify/…)；out-of-source，已 gitignore
                   （run_all.sh 则输出到 result/<时间戳>/build/，随快照走）
-profiling/        各机型策展的 ncu 参考基线：cuda_core/ + tensor_core/(H20) + a800/
+baselines/        各机型策展的 ncu 参考基线：cuda_core/ + tensor_core/(H20) + a800/
 docs/             按机型分目录：h20/(00–13 分析+总结) + a800/ + README(机型对比索引)
 result/           【瞬时快照】run_all.sh 每次执行的逐示例日志+遥测+profiling+汇总
 ```
@@ -86,7 +86,7 @@ result/           【瞬时快照】run_all.sh 每次执行的逐示例日志+�
 | 跑性能 | `./build/cuda_core/bench <id> M N K` | `./build/tensor_core/bench <id> [M N K]` |
 | 对拍正确性 | `./build/cuda_core/verify <id> M N K` | `./build/tensor_core/verify <id> [M N K]` |
 | id 范围 | 0–12（见下） | 1–5（见下） |
-| profiling | `profiling/cuda_core/` | `profiling/tensor_core/` |
+| profiling | `baselines/cuda_core/` | `baselines/tensor_core/` |
 
 ---
 
@@ -117,7 +117,7 @@ make ARCH=-arch=sm_80                  # CUDA core FP32+BF16（源码零改动�
 make tc ARCH=-arch=sm_80 TC_HOPPER=0   # Tensor Core 只编 tc_01-03（WMMA）
 ```
 
-A800 全量复现结果、与 H20/cuBLAS/理论峰值/公开基准的对账见 **[docs/A800 GEMM 复现总结](docs/a800/A800%20GEMM%20复现总结.md)**（profiling 数据在 `profiling/a800/`）。一句话：A800 BF16 张量核峰值 312T（H20 的 2.1×），cuBLAS BF16 实测 214–294T；但手写阶梯在 Ampere 上止步 WMMA（tc_03 43T，13.8% 峰），因 WGMMA/TMA/FP8 是 Hopper 独占。
+A800 全量复现结果、与 H20/cuBLAS/理论峰值/公开基准的对账见 **[docs/A800 GEMM 复现总结](docs/a800/A800%20GEMM%20复现总结.md)**（profiling 数据在 `baselines/a800/`）。一句话：A800 BF16 张量核峰值 312T（H20 的 2.1×），cuBLAS BF16 实测 214–294T；但手写阶梯在 Ampere 上止步 WMMA（tc_03 43T，13.8% 峰），因 WGMMA/TMA/FP8 是 Hopper 独占。
 
 `make tc` 把 5 个用例编成 kernel-only 对象，链接成两个统一驱动（`tc_04/tc_05` 用 TMA，额外链 `-lcuda`）。产物按引擎分目录，不再污染仓库根目录。
 
@@ -191,9 +191,9 @@ make tc
 
 剖析报告按引擎分目录，**文本产物入库**、二进制本地生成：
 
-- `profiling/cuda_core/`、`profiling/tensor_core/`：各含 `SUMMARY.md`（汇总表）+ 逐核 `*.details.txt`（`ncu --set full` 文本全量）+ `run_ncu.sh`（一键复跑）。
+- `baselines/cuda_core/`、`baselines/tensor_core/`：各含 `SUMMARY.md`（汇总表）+ 逐核 `*.details.txt`（`ncu --set full` 文本全量）+ `run_ncu.sh`（一键复跑）。
 - `*.ncu-rep`（Nsight UI 可打开）与 `*.run.log` 仅本地生成，已 `.gitignore`。
-- `profiling/throughput_4096.txt`：FP32 阶梯 @4096³ 的 headline 吞吐表。
+- `baselines/throughput_4096.txt`：FP32 阶梯 @4096³ 的 headline 吞吐表。
 - 本机采计数器需 root：`sudo /usr/local/cuda/bin/ncu`（见各 SUMMARY 头注）。
 
 ```bash

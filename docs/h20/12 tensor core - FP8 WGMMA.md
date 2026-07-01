@@ -68,4 +68,4 @@ FP8 WGMMA 复用了 BF16 那套 TMA+WGMMA+warp specialization 流水线，**只�
 
 这印证了 Hopper GEMM 的工程范式：**先把异步流水线骨架搭对，精度(bf16/fp8/未来 fp4)只是骨架上的可插拔参数。** 完整的精度/利用率阶梯见 [H20复现结论](H20%E5%A4%8D%E7%8E%B0%E7%BB%93%E8%AE%BA.md)。
 
-> 本文 ncu 原始分项输出见 `profiling/tensor_core/doc_raw/tc_05_wgmma_fp8.txt`（与 cuda_core 的 doc_raw 对称，可由 `profiling/tensor_core/collect_doc_ncu.sh` 复跑）。
+> 本文 ncu 原始分项输出见 `baselines/tensor_core/doc_raw/tc_05_wgmma_fp8.txt`（与 cuda_core 的 doc_raw 对称，可由 `baselines/tensor_core/collect_doc_ncu.sh` 复跑）。

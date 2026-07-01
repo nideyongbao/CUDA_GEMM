@@ -1,11 +1,11 @@
 # CUDA Core 用例 ncu 剖析汇总
 
-（Tensor Core 那半见 `../tensor_core/SUMMARY.md`；本表是 CUDA core 的 FP32 / BF16 阶梯。）
+（Tensor Core 那半见 `ncu-tensor_core.md`；本表是 CUDA core 的 FP32 / BF16 阶梯。）
 
-- 工具：`ncu --set full`（需 GPU 计数器权限 → `sudo /usr/local/cuda/bin/ncu`），脚本 `profiling/cuda_core/run_ncu.sh`。
+- 工具：`ncu --set full`（需 GPU 计数器权限 → `sudo /usr/local/cuda/bin/ncu`），脚本 `../../scripts/run_ncu.sh`。
 - 剖析尺寸：**2048³**（`-s 1 -c 1`，跳过第 1 次 launch、剖析第 2 次 warmup），`-k regex:<内核>` 只抓目标 `__global__`。
 - 驱动：FP32 `kernels/cuda_core/bench <id>`、BF16 `kernels/cuda_core/bench_bf16 <id>`（内部 2 warmup + 10 timed）。
-- 完整报告：`profiling/cuda_core/cc_*.ncu-rep`（UI 打开）+ `profiling/cuda_core/cc_*.details.txt`（文本全量）。
+- 完整报告：`../../baselines/cuda_core/cc_*.ncu-rep`（UI 打开）+ `../../baselines/cuda_core/cc_*.details.txt`（文本全量）。
 - **GFLOPS@2048³** 由 ncu 单次 launch 的 Duration 反推（`2·2048³/dur`），非 headline 数（headline 用 4096³，规模越大利用率越高）。
 
 ## FP32（CUDA core）

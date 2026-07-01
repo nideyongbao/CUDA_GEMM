@@ -42,8 +42,8 @@ python3 -m http.server -d docs/interactive 8000   # 然后访问 http://localhos
 
 所有 GFLOPS、利用率、占用率、SM Busy、cyc/issue、bank conflict 等数字均为 **NVIDIA H20（Hopper, CC 9.0）实测**，取自：
 
-- `profiling/throughput_4096.txt`（headline 吞吐 @4096³）
-- `profiling/cuda_core/SUMMARY.md`、`profiling/tensor_core/SUMMARY.md`（逐核 ncu 指标）
+- `baselines/throughput_4096.txt`（headline 吞吐 @4096³）
+- `../h20/ncu-cuda_core.md`、`../h20/ncu-tensor_core.md`（逐核 ncu 指标）
 - `docs/02–13`（逐步分析与总结）
 
 > **两条主线，一个母题——藏延迟。**

@@ -1,9 +1,9 @@
 # A800 ncu 剖析汇总（与 H20 同口径）
 
 - 硬件：**NVIDIA A800-SXM4-80GB**（Ampere GA100，CC 8.0，sm_80，108 SM）。
-- 工具：`ncu --set full`（采计数器需 root → `sudo /usr/local/cuda-12.8/bin/ncu`），脚本 `profiling/a800/run_ncu_a800.sh`。
-- 剖析尺寸：**2048³**（`-s 1 -c 1`，跳过第 1 次 launch、剖析第 2 次 warmup），与 H20 的 `profiling/{cuda_core,tensor_core}/SUMMARY.md` 完全同口径，便于逐核对比。
-- 完整报告：`profiling/a800/a800_*.ncu-rep`（Nsight UI 打开）+ `a800_*.details.txt`（文本全量）。
+- 工具：`ncu --set full`（采计数器需 root → `sudo /usr/local/cuda-12.8/bin/ncu`），脚本 `../../scripts/run_ncu.sh`。
+- 剖析尺寸：**2048³**（`-s 1 -c 1`，跳过第 1 次 launch、剖析第 2 次 warmup），与 H20 的 `../h20/ncu-{cuda_core,tensor_core}.md` 完全同口径，便于逐核对比。
+- 完整报告：`../../baselines/a800/a800_*.ncu-rep`（Nsight UI 打开）+ `a800_*.details.txt`（文本全量）。
 - **注意**：ncu 默认把时钟锁到 base clock 采计数器，故下表 Duration 偏长、由它反推的 GFLOPS 是 base-clock 值，**不可与 headline（4096³、锁 boost 1410MHz）的吞吐直接比**。下表只用于看与时钟无关的 **% 类指标 + 占用率 + stall**（这些才是跨卡可比的画像）。headline 吞吐见 `throughput_4096.txt`。
 
 ## Speed-of-Light + 占用率（@2048³）

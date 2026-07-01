@@ -1,6 +1,6 @@
 # A800 GEMM 复现总结
 
-> 本文把原本在 **NVIDIA H20（Hopper, sm_90）** 上写就的 GEMM 优化教程，完整迁移到 **NVIDIA A800-SXM4-80GB（Ampere, sm_80）** 真机复现：每个示例都在 A800 上重跑、记录实际结果，并与 ① H20 基线（`profiling/throughput_4096.txt`、`docs/13`）② cuBLAS 库 ③ 硬件理论峰值 ④ 一份公开 A800 cuBLAS BF16 参考基准，逐项对账，给出结论。
+> 本文把原本在 **NVIDIA H20（Hopper, sm_90）** 上写就的 GEMM 优化教程，完整迁移到 **NVIDIA A800-SXM4-80GB（Ampere, sm_80）** 真机复现：每个示例都在 A800 上重跑、记录实际结果，并与 ① H20 基线（`baselines/throughput_4096.txt`、`docs/13`）② cuBLAS 库 ③ 硬件理论峰值 ④ 一份公开 A800 cuBLAS BF16 参考基准，逐项对账，给出结论。
 >
 > 分支：`feat/a800-reproduction`。原 H20 收口见 [docs/13](../h20/13%20H20%20GEMM%20复现总结.md)。
 
@@ -223,7 +223,7 @@ H20 教程"最后三级质变"（异步 warpgroup MMA 用流水线代替占用�
 
 ## 8、ncu 关键洞察（A800 vs H20，2048³，% 类指标跨卡可比）
 
-> 完整见 [profiling/a800/SUMMARY.md](../../profiling/a800/SUMMARY.md)。ncu 锁 base clock 采计数器，故只看与时钟无关的 %/占用率/stall。
+> 完整见 [ncu分析.md](ncu分析.md)。ncu 锁 base clock 采计数器，故只看与时钟无关的 %/占用率/stall。
 
 | 用例 | A800 Compute(SM)% | SMBusy% | L1/TEX% | 占用率 | cyc/iss | H20 对照(Compute/L1TEX/占用) |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -264,7 +264,7 @@ sudo nvidia-smi -i 0 -lgc 1410         # 锁额定 boost 以复现 canonical（�
 sudo nvidia-smi -i 0 -rgc              # 用完解锁
 ```
 
-数据产物：`profiling/a800/`（`throughput_4096.txt` 全量 sweep、`scaling.txt` 缩放、`SUMMARY.md`+`a800_*.details.txt` ncu 全量、`verify_*.txt` 对拍）。
+数据产物：`baselines/a800/`（`throughput_4096.txt` 全量 sweep、`scaling.txt` 缩放、`a800_*.details.txt`(ncu 全量,分析见 ncu分析.md)、`verify_*.txt` 对拍）。
 
 ---
 

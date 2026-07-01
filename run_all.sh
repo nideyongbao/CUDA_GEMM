@@ -23,7 +23,7 @@
 #
 # 设计约定：代码目录(kernels/include/scripts/Makefile/run_all.sh)只放代码；
 #   逐次执行日志与 profiling 等【瞬时产物】统一进 result/<时间戳>/ 做对比快照。
-#   profiling/{cuda_core,tensor_core,a800}/ 是各机型策展好的【参考 ncu 基线】(文档引用)。
+#   baselines/{cuda_core,tensor_core,a800}/ 是各机型策展好的【参考 ncu 基线】(文档引用)。
 #
 # 架构自适应：CUDA core 全机型；Tensor Core Ampere/Ada 仅 WMMA(tc_01-03)，
 #   Hopper 额外 WGMMA+TMA(tc_04)/FP8(tc_05)。
@@ -203,23 +203,13 @@ fi
 [ "$DO_AUTOTUNE" = 1 ] && run_test "10_autotune" "$CC_B autotune $BENCH_SIZE $BENCH_SIZE $BENCH_SIZE"
 
 # ---------------------------------------------------------------------------
-# 10. 可选 Nsight Compute（瞬时产物 → result/<ts>/profiling/，不进代码/参考树）
+# 10. 可选 Nsight Compute（瞬时产物 → result/<ts>/baselines/，不进代码/参考树）
 # ---------------------------------------------------------------------------
 if [ "$DO_NCU" = 1 ]; then
-  if sudo -n true 2>/dev/null && command -v ncu >/dev/null 2>&1; then
-    NDIR="${RUN_DIR}/profiling"; mkdir -p "$NDIR"
-    ncu_one(){ # ncu_one <name> <regex> <exe> <id>
-      sudo -n ncu --set full -k "regex:$2" -s 1 -c 1 -f -o "${NDIR}/$1" "$3" "$4" 2048 2048 2048 >/dev/null 2>&1
-      ncu -i "${NDIR}/$1.ncu-rep" --page details > "${NDIR}/$1.details.txt" 2>/dev/null || true
-    }
-    ncu_group(){
-      ncu_one cc_naive naive_kernel "$CC_B" 1; ncu_one cc_smem smem_kernel "$CC_B" 2
-      ncu_one cc_doublebuffer double_buffer_kernel "$CC_B" 12
-      ncu_one tc_01 wmma_naive_kernel "$TC_B" 1; ncu_one tc_02 wmma_smem_kernel "$TC_B" 2; ncu_one tc_03 wmma_pipe_kernel "$TC_B" 3
-      sudo -n chown -R "$(id -u):$(id -g)" "$NDIR" 2>/dev/null || true
-    }
-    timed "11_ncu" ncu_group
-  else log " 跳过 --ncu：需免密 sudo + PATH 里有 ncu"; fi
+  if command -v ncu >/dev/null 2>&1 || [ -x /usr/local/cuda/bin/ncu ]; then
+    # 瞬时 profiling → result/<ts>/profiling/（统一走 scripts/run_ncu.sh，架构自适应）
+    timed "11_ncu" bash "${SCRIPT_DIR}/scripts/run_ncu.sh" "${RUN_DIR}/profiling" 2048 "$BDIR" quick
+  else log " 跳过 --ncu：找不到 ncu"; fi
 fi
 
 # ---------------------------------------------------------------------------

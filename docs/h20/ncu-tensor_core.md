@@ -1,8 +1,8 @@
 # Tensor Core 用例 ncu 剖析汇总
 
-- 工具：`ncu --set full`（需 GPU 计数器权限，用 `sudo /usr/local/cuda/bin/ncu`），脚本 `profiling/tensor_core/run_ncu.sh`。
+- 工具：`ncu --set full`（需 GPU 计数器权限，用 `sudo /usr/local/cuda/bin/ncu`），脚本 `../../scripts/run_ncu.sh`。
 - 剖析尺寸：**2048³**（`-s 1 -c 1`，跳过 verify、剖析 bench 尺寸的一次 launch）。
-- 每个用例的完整报告：`profiling/tensor_core/<name>.ncu-rep`（可用 Nsight Compute UI 打开）+ `profiling/tensor_core/<name>.details.txt`（文本全量）。
+- 每个用例的完整报告：`../../baselines/tensor_core/<name>.ncu-rep`（可用 Nsight Compute UI 打开）+ `../../baselines/tensor_core/<name>.details.txt`（文本全量）。
 - 注意：表中是 2048³ 的剖析值；headline GFLOPS 用 4096³（见 docs/H20复现结论，规模越大利用率越高）。
 
 ## Speed-of-Light + 占用率（@2048³）
