@@ -26,10 +26,12 @@
 #include "../../include/tc_common.cuh"   // TC_CHECK_*, tc_f2bf, tc_cublas_bf16（均 static inline，无链接冲突）
 
 // ---- 张量核配置（可编译期 -DTC06_* 覆盖以复现调优扫描）----
-// A800 锁频 4096³ 调优结论(见 docs/a800)：下方默认(BM128 BN128 BK32 · W2×4 · 3 级)最优，
-//   ≈150T=48%峰=3.5×tc_03。更大 warp tile 的数据复用/ILP 比提高占用率(kernel 受寄存器限
+// A800 锁频 4096³ 调优结论(见 docs/a800，约 25 组配置)：下方默认(BM128 BN128 BK32 · W2×4 · 3 级)
+//   最优，≈150T=48%峰=3.5×tc_03。更大 warp tile 的数据复用/ILP 比提高占用率(kernel 受寄存器限
 //   122 regs→2 block/SM)更划算；BK64/16-warp/BN256 均更差；朴素 XOR swizzle 与 B 用 x4 装载
-//   都未跑赢"padding + B 用 x2"。要再往 60–70% 需寄存器级 fragment 双缓冲 + 无冲突 swizzle。
+//   都未跑赢"padding + B 用 x2"。**寄存器级 fragment 双缓冲实测也无益**(nvcc 对完全展开的内层循环
+//   本就自动软件流水)；强制 3 block/SM 也不提速(非占用率受限)——~48% 是纯 CUDA C++ 上限，再往
+//   60–85% 属 CUTLASS/SASS 级寄存器分配与指令调度(cuBLAS 走此路到 85%)。详见 docs/a800 §5-6。
 #ifndef TC06_BM
 #define TC06_BM 128
 #endif

@@ -16,7 +16,7 @@
 
 1. **CUDA core / FP32**：完整复现整条阶梯，13 个 kernel 全部对拍 cuBLAS PASS。手写最佳 **17.6 TFLOPS ≈ FP32 峰值(19.49T) 的 90%、cuBLAS SGEMM 的 93%**。因 A800 FP32 单元只有 64 核/SM（Hopper 128 核/SM），**绝对吞吐低于 H20**（17.6 vs 24T；cuBLAS 19 vs 30T）。
 2. **BF16 / 张量核（关键差异）**：A800 BF16 张量核峰值 **312 TFLOPS = H20(148T) 的 2.1 倍**。A800 cuBLAS BF16 实测 **214–270 TFLOPS（默认时钟）/ 262–295 TFLOPS（锁频）**，**约为 H20 cuBLAS BF16(132T) 的 1.6–2.2 倍** —— **做 BF16 GEMM，A800 是更强的卡**。
-3. **手写张量核在 A800 只能到 WMMA**：Ampere **硬件无 WGMMA / TMA / FP8**，H20 教程里真正质变的 **tc_04(WGMMA→80%)、tc_05(FP8)** 在 A800 **无法编译运行**。A800 手写张量核（当时）止步 **tc_03 WMMA+cp.async = 43 TFLOPS（锁频，13.8% 峰值）**。要吃满 312T 需 Ampere 原生 `mma.sync`+`ldmatrix`——**本轮已补为 tc_06 → 150.3T=48.2% 峰=3.49×tc_03**（见上方【更新】），再往 85% 才需 cuBLAS/CUTLASS 级的寄存器双缓冲+无冲突 swizzle。
+3. **手写张量核在 A800 只能到 WMMA**：Ampere **硬件无 WGMMA / TMA / FP8**，H20 教程里真正质变的 **tc_04(WGMMA→80%)、tc_05(FP8)** 在 A800 **无法编译运行**。A800 手写张量核（当时）止步 **tc_03 WMMA+cp.async = 43 TFLOPS（锁频，13.8% 峰值）**。要吃满 312T 需 Ampere 原生 `mma.sync`+`ldmatrix`——**本轮已补为 tc_06 → 150.3T=48.2% 峰=3.49×tc_03**（见上方【更新】）。~48% 是纯 CUDA C++ 上限（实测寄存器级双缓冲无益，因 nvcc 已自动软件流水），再往 60–85% 属 CUTLASS/SASS 级寄存器分配与调度。
 4. **方法论 & 参考对账**：A800 默认 boost 在重张量负载下只能维持 **~1140–1290 MHz**（dmon 实测，非额定 1410）。**默认时钟下我的 cuBLAS BF16 与公开参考表逐 shape 吻合（误差 ≤3%）**；canonical 数据用**锁频 1410MHz**（可复现、额定满频）。详见 §5。
 
 ---
@@ -227,7 +227,7 @@ H20 教程"最后三级质变"（异步 warpgroup MMA 用流水线代替占用�
 
 > **一句话**：13.8% 不是测错、也不是 A800 跑不动，而是**仓库缺了 Ampere 原生 `mma.sync`+`ldmatrix` 这级手写 kernel**（H20 用 WGMMA 顶替了它，A800 没得顶替）。补上这级（CUTLASS Ampere 风格）手写就能往 cuBLAS 的 94% 靠。
 >
-> **【本轮已补 · 验证了这个判断】** 新增 **tc_06（`mma.sync`+`ldmatrix`+多级 `cp.async`）**：同轮 ncu 实测 tc_03→tc_06 的 L1/TEX 从 **93.8% 降到 44.5%**、6 路 bank 冲突消失、每指令停顿从 27.4 砍到 12.85 周期、总周期少 2.5×，手写从 **13.8% 拉到 48.2% 峰（150.3T）**。瓶颈随之从"L1/SMEM bank 冲突墙"变为"寄存器限占用率(延迟墙)"——离 cuBLAS 的 85% 还差的部分正是寄存器级 fragment 双缓冲 + 无冲突 swizzle。全程剖析见 [Ampere mma.sync 张量核](Ampere%20mma.sync%20张量核.md)。
+> **【本轮已补 · 验证了这个判断】** 新增 **tc_06（`mma.sync`+`ldmatrix`+多级 `cp.async`）**：同轮 ncu 实测 tc_03→tc_06 的 L1/TEX 从 **93.8% 降到 44.5%**、6 路 bank 冲突消失、每指令停顿从 27.4 砍到 12.85 周期、总周期少 2.5×，手写从 **13.8% 拉到 48.2% 峰（150.3T）**。瓶颈随之从"L1/SMEM bank 冲突墙"变为"发射/依赖受限"。**后续冲 60–70% 的尝试(寄存器级双缓冲、单 barrier、强制高占用率、更大 warp tile 共约 25 组)全部实测无益**——纯 CUDA C++ 的现实上限就是 ~48%，再往 85% 属 CUTLASS/SASS 级寄存器分配与调度。全程剖析与路线见 [Ampere mma.sync 张量核 §5-6](Ampere%20mma.sync%20张量核.md)。
 
 ---
 
