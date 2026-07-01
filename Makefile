@@ -43,13 +43,13 @@ FP32_SRCS := $(filter-out $(CC_DIR)/bf16_cudacore.cu $(CC_DRIVERS),$(wildcard $(
 FP32_KERNEL_OBJS := $(patsubst $(CC_DIR)/%.cu,$(CC_OUT)/%.o,$(FP32_SRCS))
 BF16_KERNEL_OBJS := $(CC_OUT)/bf16_cudacore.o
 
-# Tensor core 用例对象（Hopper 全 5 个 / Ampere 只 tc_01-03）
+# Tensor core 用例对象。tc_06(mma.sync，sm_80+ 通用)两个分支都编；tc_04/05(Hopper 独占)只 Hopper 编。
 ifeq ($(TC_HOPPER),1)
-  TC_CASE_OBJS := $(addprefix $(TC_OUT)/,tc_01_wmma_naive.o tc_02_wmma_smem.o tc_03_wmma_pipe.o tc_04_wgmma_tma_ws.o tc_05_wgmma_fp8.o)
+  TC_CASE_OBJS := $(addprefix $(TC_OUT)/,tc_01_wmma_naive.o tc_02_wmma_smem.o tc_03_wmma_pipe.o tc_04_wgmma_tma_ws.o tc_05_wgmma_fp8.o tc_06_mma_pipe.o)
   TC_LDFLAGS := $(LDFLAGS_TMA)
   TC_DEFS :=
 else
-  TC_CASE_OBJS := $(addprefix $(TC_OUT)/,tc_01_wmma_naive.o tc_02_wmma_smem.o tc_03_wmma_pipe.o)
+  TC_CASE_OBJS := $(addprefix $(TC_OUT)/,tc_01_wmma_naive.o tc_02_wmma_smem.o tc_03_wmma_pipe.o tc_06_mma_pipe.o)
   TC_LDFLAGS := $(LDFLAGS)
   TC_DEFS := -DNO_HOPPER
 endif

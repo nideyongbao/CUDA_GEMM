@@ -1,0 +1,1 @@
+[tc_02 WMMA_smem] VERIFY max_abs=0.000e+00 bad=0/4194304  PASS

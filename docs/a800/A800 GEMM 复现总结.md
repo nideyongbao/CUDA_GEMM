@@ -3,6 +3,12 @@
 > 本文把原本在 **NVIDIA H20（Hopper, sm_90）** 上写就的 GEMM 优化教程，完整迁移到 **NVIDIA A800-SXM4-80GB（Ampere, sm_80）** 真机复现：每个示例都在 A800 上重跑、记录实际结果，并与 ① H20 基线（`baselines/throughput_4096.txt`、`docs/13`）② cuBLAS 库 ③ 硬件理论峰值 ④ 一份公开 A800 cuBLAS BF16 参考基准，逐项对账，给出结论。
 >
 > 分支：`feat/a800-reproduction`。原 H20 收口见 [docs/13](../h20/13%20H20%20GEMM%20复现总结.md)。
+>
+> **【更新 · 本轮补齐】** 本文当时的核心结论"手写止步 WMMA、缺 Ampere 原生 `mma.sync` 这一级"**已落实解决**：
+> 新增 **tc_06（`mma.sync.m16n8k16`+`ldmatrix`+多级 `cp.async`）**，A800 锁频 4096³ **150.3 TFLOPS = 48.2% 峰 = 3.49× tc_03**，
+> 绝对值反超 H20 手写最佳(120.6T)。下文"止步 WMMA / 最值得补的一课"等表述**保留为当时的发现过程**；
+> 补齐后的根因剖析（ncu 证据：WMMA 的 `load_matrix_sync` 有 6 路 bank 冲突把 L1/SMEM 打满 vs ldmatrix 消除之）见
+> **[Ampere mma.sync 张量核](Ampere%20mma.sync%20张量核.md)**。
 
 ---
 
@@ -10,7 +16,7 @@
 
 1. **CUDA core / FP32**：完整复现整条阶梯，13 个 kernel 全部对拍 cuBLAS PASS。手写最佳 **17.6 TFLOPS ≈ FP32 峰值(19.49T) 的 90%、cuBLAS SGEMM 的 93%**。因 A800 FP32 单元只有 64 核/SM（Hopper 128 核/SM），**绝对吞吐低于 H20**（17.6 vs 24T；cuBLAS 19 vs 30T）。
 2. **BF16 / 张量核（关键差异）**：A800 BF16 张量核峰值 **312 TFLOPS = H20(148T) 的 2.1 倍**。A800 cuBLAS BF16 实测 **214–270 TFLOPS（默认时钟）/ 262–295 TFLOPS（锁频）**，**约为 H20 cuBLAS BF16(132T) 的 1.6–2.2 倍** —— **做 BF16 GEMM，A800 是更强的卡**。
-3. **手写张量核在 A800 只能到 WMMA**：Ampere **硬件无 WGMMA / TMA / FP8**，H20 教程里真正质变的 **tc_04(WGMMA→80%)、tc_05(FP8)** 在 A800 **无法编译运行**。A800 手写张量核止步 **tc_03 WMMA+cp.async = 43 TFLOPS（锁频，13.8% 峰值）**。要吃满 312T 只能靠 cuBLAS/CUTLASS（Ampere 原生 `mma.sync`+`ldmatrix`，本仓库未手写）。
+3. **手写张量核在 A800 只能到 WMMA**：Ampere **硬件无 WGMMA / TMA / FP8**，H20 教程里真正质变的 **tc_04(WGMMA→80%)、tc_05(FP8)** 在 A800 **无法编译运行**。A800 手写张量核（当时）止步 **tc_03 WMMA+cp.async = 43 TFLOPS（锁频，13.8% 峰值）**。要吃满 312T 需 Ampere 原生 `mma.sync`+`ldmatrix`——**本轮已补为 tc_06 → 150.3T=48.2% 峰=3.49×tc_03**（见上方【更新】），再往 85% 才需 cuBLAS/CUTLASS 级的寄存器双缓冲+无冲突 swizzle。
 4. **方法论 & 参考对账**：A800 默认 boost 在重张量负载下只能维持 **~1140–1290 MHz**（dmon 实测，非额定 1410）。**默认时钟下我的 cuBLAS BF16 与公开参考表逐 shape 吻合（误差 ≤3%）**；canonical 数据用**锁频 1410MHz**（可复现、额定满频）。详见 §5。
 
 ---
@@ -125,9 +131,11 @@ tensor_core 用例 id：
 | ③ | tc_03 WMMA_pipe (cp.async) | **43051**（默认 34754） | **13.8%** | 38057 | 25.7% |
 | ④ | tc_04 WGMMA(TMA+WS) | **不支持** | — | 119357 | 80.6% |
 | ⑤ | tc_05 WGMMA_fp8 | **不支持** | — | 224225 | 75.8%/296T |
+| ⑥ | **tc_06 MMA_pipe（mma.sync+ldmatrix）** | **150333**（默认 120808） | **48.2%** | 可跑(对照) | — |
 
 - A800 WMMA 三级**绝对吞吐略高于 H20**（tc_03 43 vs 38T）——张量核更强；但 **% 峰值更低**（13.8% vs 25.7%），同样写法填不满 2 倍大的峰值。
-- **A800 手写张量核到 tc_03(43T) 即到顶**：缺 WGMMA/TMA，无法走 tc_04(80%)。**A800 手写最高 13.8% vs H20 手写最高 80.6%——两次复现最大鸿沟。**
+- **（当时）A800 手写张量核到 tc_03(43T) 即到顶**：缺 WGMMA/TMA，无法走 tc_04(80%)。**A800 手写最高 13.8% vs H20 手写最高 80.6%——两次复现最大鸿沟。**
+- **【本轮补齐】** 新增 Ampere 原生 **tc_06（`mma.sync`+`ldmatrix`+多级 `cp.async`，sm_80+ 通用）→ 150.3T=48.2% 峰=3.49×tc_03**，把上面这条"最大鸿沟"从 13.8% 缩到 48%（绝对值 150T 反超 H20 手写最佳 120T）。它不依赖 WGMMA/TMA，A800/H20 都能跑。剖析见 [Ampere mma.sync 张量核](Ampere%20mma.sync%20张量核.md)。
 
 ---
 
@@ -218,6 +226,8 @@ H20 教程"最后三级质变"（异步 warpgroup MMA 用流水线代替占用�
    关键差别：cuBLAS 用 `ldmatrix` 从 smem 高效喂 fragment（绕开 `load_matrix_sync` 的 L1/TEX 瓶颈）、用 `mma.sync` 更细粒度发射、3 级流水线 + swizzle 消 bank conflict —— 把张量核喂饱到 94%。WMMA 这套 API 在 Ampere 上**喂数效率天生低一档**，加上 tc_01-03 是教学版（无 smem swizzle、无寄存器双缓冲），所以只到 ~14%。
 
 > **一句话**：13.8% 不是测错、也不是 A800 跑不动，而是**仓库缺了 Ampere 原生 `mma.sync`+`ldmatrix` 这级手写 kernel**（H20 用 WGMMA 顶替了它，A800 没得顶替）。补上这级（CUTLASS Ampere 风格）手写就能往 cuBLAS 的 94% 靠。
+>
+> **【本轮已补 · 验证了这个判断】** 新增 **tc_06（`mma.sync`+`ldmatrix`+多级 `cp.async`）**：同轮 ncu 实测 tc_03→tc_06 的 L1/TEX 从 **93.8% 降到 44.5%**、6 路 bank 冲突消失、每指令停顿从 27.4 砍到 12.85 周期、总周期少 2.5×，手写从 **13.8% 拉到 48.2% 峰（150.3T）**。瓶颈随之从"L1/SMEM bank 冲突墙"变为"寄存器限占用率(延迟墙)"——离 cuBLAS 的 85% 还差的部分正是寄存器级 fragment 双缓冲 + 无冲突 swizzle。全程剖析见 [Ampere mma.sync 张量核](Ampere%20mma.sync%20张量核.md)。
 
 ---
 
@@ -280,4 +290,4 @@ sudo nvidia-smi -i 0 -rgc              # 用完解锁
 | BF16 峰值 | **312 TFLOPS** | 148 TFLOPS | **2.1×** |
 | FP8 | 无 | 224 TFLOPS | — |
 
-> 一句话：**A800 的 BF16 张量核肌肉是 H20 的两倍，cuBLAS 能把它打到 94%；但本教程的手写阶梯在 Ampere 上只能爬到 WMMA(13.8% 峰)，因为真正解锁算力的 WGMMA/TMA/FP8 是 Hopper 独占。** A800 复现完整重走了 CUDA core 全套 + WMMA 三级，ncu 证明瓶颈与 H20 同源；缺的一课是 Ampere 原生 `mma.sync` 级手写 kernel。
+> 一句话：**A800 的 BF16 张量核肌肉是 H20 的两倍，cuBLAS 能把它打到 94%；本教程的手写阶梯原本在 Ampere 上只能爬到 WMMA(13.8% 峰)——因为真正解锁算力的 WGMMA/TMA/FP8 是 Hopper 独占。** A800 复现完整重走了 CUDA core 全套 + WMMA 三级，ncu 证明瓶颈与 H20 同源；当时缺的一课是 Ampere 原生 `mma.sync` 级手写 kernel——**本轮已补：tc_06（`mma.sync`+`ldmatrix`+cp.async）把手写从 13.8% 拉到 48.2% 峰(150.3T=3.49×tc_03)，绝对值反超 H20 手写最佳**，见 [Ampere mma.sync 张量核](Ampere%20mma.sync%20张量核.md)。

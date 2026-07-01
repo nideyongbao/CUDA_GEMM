@@ -1,0 +1,1 @@
+vectorized_kernel: M=4096 N=4096 K=4096, time=7.7983 ms, GFLOPS=17624.28

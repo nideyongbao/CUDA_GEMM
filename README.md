@@ -1,6 +1,6 @@
 # CUDA_MATMUAL — H20 GEMM 优化阶梯
 
-一个学习型矩阵乘法（GEMM）项目：从最朴素的 CUDA SGEMM 出发，一步步优化到 **shared memory → register tiling → float4 → warp tiling → bank conflict → double buffering**（CUDA core），再跨到 **WMMA → cp.async 流水线 → WGMMA + TMA + warp specialization → FP8**（Tensor Core），最终逼近 cuBLAS。
+一个学习型矩阵乘法（GEMM）项目：从最朴素的 CUDA SGEMM 出发，一步步优化到 **shared memory → register tiling → float4 → warp tiling → bank conflict → double buffering**（CUDA core），再跨到 **WMMA → cp.async 流水线 → mma.sync + ldmatrix → WGMMA + TMA + warp specialization → FP8**（Tensor Core），最终逼近 cuBLAS。
 
 重点不是"给一个最快的 kernel"，而是把**每一步优化为什么有效、什么时候无效、怎么用 Nsight Compute 判断真正的瓶颈**记录下来。代码负责复现实验，`docs/` 负责沉淀分析。所有 ncu 数据均为 **NVIDIA H20（Hopper，CC 9.0，78 SM）实测**。
 
@@ -28,9 +28,12 @@
 | 3 | tc_03 WMMA_pipe | + cp.async 多级流水线 | 25.7% |
 | **4** | **tc_04 WGMMA** | warpgroup 异步 + TMA + warp specialization | **80.6%**（8192³ 88%）|
 | 5 | tc_05 WGMMA_fp8 | 同上换 FP8 | 75.8% /296T（224 TFLOPS）|
+| 6 | tc_06 MMA_pipe | mma.sync + ldmatrix + cp.async（sm_80+ 通用，承上启下）| **A800 48.2%**\* |
 | — | 参考 cuBLAS BF16（fair） | — | 89.1% |
 
 > 一句话结论：**warp 级 WMMA 靠高占用率（TLP）藏延迟，张量核吃不饱（≤26%）；warpgroup 级 WGMMA 靠异步多级流水线，占用率仅 7.6% 却把 SM Busy 拉到 83%**——这才是 Hopper 上逼近 148T 的路。详见 [docs/13](docs/h20/13%20H20%20GEMM%20复现总结.md)。
+>
+> \* **tc_06（mma.sync+ldmatrix）是 sm_80+ 通用的 Ampere 原生一级**，A800 与 H20 都能编都能跑；上表其余为 H20 实测，tc_06 目前列 **A800 锁频 4096³ 实测 48.2%（150.3T/312T）= 3.49× tc_03** —— 它把 Ampere 手写从"止步 WMMA 14% 峰"拉到 48% 峰，瓶颈也从共享内存 bank 冲突墙搬到占用率/延迟墙。在 H20 上作 "warp 级 mma.sync vs warpgroup 级 WGMMA" 对照。详见 [Ampere mma.sync 张量核](docs/a800/Ampere%20mma.sync%20张量核.md)。
 
 ---
 
@@ -118,12 +121,12 @@ make clean  # 清理 .o 与可执行文件
 
 ```bash
 make ARCH=-arch=sm_80                  # CUDA core FP32+BF16（源码零改动）
-make tc ARCH=-arch=sm_80 TC_HOPPER=0   # Tensor Core 只编 tc_01-03（WMMA）
+make tc ARCH=-arch=sm_80 TC_HOPPER=0   # Tensor Core 编 tc_01-03（WMMA）+ tc_06（mma.sync）
 ```
 
-A800 全量复现结果、与 H20/cuBLAS/理论峰值/公开基准的对账见 **[docs/A800 GEMM 复现总结](docs/a800/A800%20GEMM%20复现总结.md)**（profiling 数据在 `baselines/a800/`）。一句话：A800 BF16 张量核峰值 312T（H20 的 2.1×），cuBLAS BF16 实测 214–294T；但手写阶梯在 Ampere 上止步 WMMA（tc_03 43T，13.8% 峰），因 WGMMA/TMA/FP8 是 Hopper 独占。
+A800 全量复现结果、与 H20/cuBLAS/理论峰值/公开基准的对账见 **[docs/A800 GEMM 复现总结](docs/a800/A800%20GEMM%20复现总结.md)**（profiling 数据在 `baselines/a800/`）。一句话：A800 BF16 张量核峰值 312T（H20 的 2.1×），cuBLAS BF16 实测 214–294T；手写阶梯原止步 WMMA（tc_03 43T，13.8% 峰），本轮补上 **Ampere 原生 tc_06（mma.sync+ldmatrix+cp.async）→ 150.3T = 48.2% 峰 = 3.49× tc_03**（仍低于 cuBLAS 85%，因 Ampere 无 WGMMA/TMA/FP8，天花板靠 TLP/ILP），根因剖析见 **[Ampere mma.sync 张量核](docs/a800/Ampere%20mma.sync%20张量核.md)**。
 
-`make tc` 把 5 个用例编成 kernel-only 对象，链接成两个统一驱动（`tc_04/tc_05` 用 TMA，额外链 `-lcuda`）。产物按引擎分目录，不再污染仓库根目录。
+`make tc` 把 6 个用例编成 kernel-only 对象（Ampere 上 4 个：`tc_04/tc_05` 是 Hopper 独占，`tc_06` sm_80+ 通用），链接成两个统一驱动（`tc_04/tc_05` 用 TMA，额外链 `-lcuda`）。派发按显式 id 查表（`tc_find`），`tc_06` id 固定=6，跨架构稳定。产物按引擎分目录，不再污染仓库根目录。
 
 ---
 

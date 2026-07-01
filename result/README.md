@@ -13,7 +13,7 @@
 
 | GPU | 架构 / CC | 时钟策略 | FP32峰 / cuBLAS | BF16峰 / cuBLAS | 手写TC · BF16 路径 | FP8峰 / 手写TC · FP8 |
 | --- | --- | --- | --- | --- | --- | --- |
-| **A800-SXM** | Ampere sm_80 | lock@1410 | 19.5T / **19.0T** (98%) | 312T / **264.7T** (85%) | **43.1T** (14%, WMMA 止步) | — (Ampere 无 FP8) |
+| **A800-SXM** | Ampere sm_80 | lock@1410 | 19.5T / **19.0T** (98%) | 312T / **264.7T** (85%) | **150.3T** (48%, tc_06 mma.sync=3.5×tc_03) | — (Ampere 无 FP8) |
 | **H20** | Hopper sm_90 | lock@1980 (~1830实测) | 39.5T / **28.0T** (71%) | 148T / **134.0T** (91%) | **120.6T** (82%, WGMMA) | 296T / **226.1T** (76%) |
 | **A10G** | Ampere sm_86 | Modal 默认¹ | 31.2T / **14.1T** (45%) | 125T / **92.7T** (74%) | **25.1T** (20%, WMMA) | — (Ampere 无 FP8) |
 | **L4** | Ada sm_89 | Modal 默认¹ | 30.3T / **13.3T** (44%) | 121T / **83.5T** (69%) | **25.4T** (21%, WMMA) | 242T / **未跑**² |
@@ -26,13 +26,13 @@
   Ada 上跑不了；要在 L4 测 FP8 需另写 `mma.sync` 版本（见 [跨代际适配设计 §5](../docs/跨代际适配设计.md)）。
 
 **读表的四条主线：**
-1. **Ampere 峰值高、但手写吃不到**：A800 BF16 峰值 312T 是 H20（148T）的 2.1×，可**手写阶梯止步 WMMA 只到 43T（14%峰）**——Ampere 没有 WGMMA/TMA，手写要藏延迟只能靠占用率(TLP)，天花板低。cuBLAS 则能到 85%。
+1. **Ampere 峰值高、补上 mma.sync 后手写能吃到近一半**：A800 BF16 峰值 312T 是 H20（148T）的 2.1×。手写阶梯**原止步 WMMA 只到 43T（14%峰）**，本轮补上 Ampere 原生 **tc_06（`mma.sync`+`ldmatrix`+多级 `cp.async`）→ 150.3T（48%峰）= 3.49×tc_03**，绝对值已**反超** H20 手写最佳（120.6T）。ncu 证据：WMMA 的 `load_matrix_sync` 有 6 路 bank 冲突把 L1/SMEM 管线打满(93.8%)、张量核挨饿；ldmatrix 消除冲突后瓶颈变成寄存器限占用率(延迟墙)。Ampere 没有 WGMMA/TMA，天花板本就靠 TLP/ILP，cuBLAS 能到 85%。详见 [docs/a800/Ampere mma.sync 张量核](../docs/a800/Ampere%20mma.sync%20张量核.md)。
 2. **Hopper 峰值小、但手写打得满**：H20 靠 **WGMMA+TMA+warp specialization** 的异步多级流水线，手写 BF16 到 **82% 峰**、FP8 到 **76% 的 FP8 峰（226T）**——单卡手写就超过 A800 手写最佳 5×。
 3. **FP8 让同一条流水线吞吐翻倍**：H20 FP8 226T ≈ BF16 手写 120T 的 1.9×，因为 FP8 张量核吞吐是 BF16 的 2×（296T vs 148T）。**这也是为什么 FP8 的利用率必须对 296T 算（76%），而不是对 148T 算（会得出不可能的 153%）**——详见下方「FP8 口径修正」。
 4. **入门卡（A10/L4）：手写止步 WMMA，且小功耗卡默认时钟会降频**：A10G/L4 与 A800 同属「无 WGMMA」阵营，手写只到 WMMA 20–21% 峰；且 72–150W 的功耗墙让默认时钟下 cuBLAS 也只 69–74% 峰（大尺寸更低）。它们验证了「跨代际能跑通、口径正确、精度门控对（无 FP8 假象）」——正是本轮适配的目标。
 
 各机完整报告：
-- A800-SXM：[`20260701_065155_both/locked/00_summary.md`](20260701_065155_both/locked/00_summary.md)
+- A800-SXM：[`20260701_093537_both/locked/00_summary.md`](20260701_093537_both/locked/00_summary.md)（含新增 tc_06 mma.sync；旧 `20260701_065155_both` 为补 tc_06 前基线）
 - H20：[`20260701_150344_both/locked/00_summary.md`](20260701_150344_both/locked/00_summary.md)（软链 `latest`）
 - A10G（Ampere sm_86）：[`A10_20260701_074243_modal/00_summary.md`](A10_20260701_074243_modal/00_summary.md)（Modal 实测）
 - L4（Ada sm_89）：[`L4_20260701_073953_modal/00_summary.md`](L4_20260701_073953_modal/00_summary.md)（Modal 实测）

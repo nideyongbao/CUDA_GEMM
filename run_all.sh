@@ -126,26 +126,29 @@ MAJOR=${CC%.*}; MINOR=${CC#*.}
 # 架构自适应矩阵（CC → 编译目标 + 张量核用例上限）。设备算力/精度支持的唯一真源是
 # scripts/gpu_specs.py（BF16/FP8/FP4 峰值按 CC 门控）；这里只决定「编什么、跑到第几级」。
 #   张量核阶梯：tc_01-03 = WMMA(bf16 输入，sm_80+ 通用)；tc_04 = WGMMA+TMA、tc_05 = FP8 WGMMA
-#              （tc_04/05 是 Hopper sm_90 独占指令，靠 TC_HOPPER=1 打开、-DNO_HOPPER 关闭）。
-#   TC_MAX = 本机能跑到的最高张量核用例 id（0 表示跳过张量核）。
+#              （tc_04/05 是 Hopper sm_90 独占指令，靠 TC_HOPPER=1 打开、-DNO_HOPPER 关闭）；
+#              tc_06 = mma.sync+ldmatrix+cp.async(sm_80+ 通用，各代际都编都跑，id 固定=6)。
+#   TC_MAX = 是否/编到第几级 WMMA-系(0=跳过张量核；仅作编译门控与提示)。
+#   TC_IDS = 本机实际要跑的张量核用例 id 列表（显式，因架构门控会摘掉中间的 tc_04/05，
+#            用 id 而非 seq 才能让 tc_06 跨架构稳定命中）。
 # 换代际只改这张表 + gpu_specs.py，kernel 源码零改动。
 # ---------------------------------------------------------------------------
 case "${MAJOR}.${MINOR}" in
-  7.*)             SM_ARCH="sm_${MAJOR}${MINOR}"; TC_HOPPER=0; TC_MAX=0 ;;  # Volta/Turing：无 bf16 WMMA → 跳过张量核(只跑 CUDA core)
-  8.0)             SM_ARCH="sm_80";               TC_HOPPER=0; TC_MAX=3 ;;  # Ampere 数据中心 A100/A800
-  8.6|8.7|8.9)     SM_ARCH="sm_${MAJOR}${MINOR}"; TC_HOPPER=0; TC_MAX=3 ;;  # Ampere 图形 A10/A10G/A40 · Ada L4/L40S(有 FP8 硬件，但本仓库 FP8 走 Hopper WGMMA → 只 WMMA)
-  9.*)             SM_ARCH="sm_90a";              TC_HOPPER=1; TC_MAX=5 ;;  # Hopper H100/H200/H20：WGMMA+TMA+FP8 全家桶
-  10.*|11.*|12.*)  SM_ARCH="sm_${MAJOR}${MINOR}"; TC_HOPPER=0; TC_MAX=3 ;;  # Blackwell B200/RTX50：WMMA 可用；UMMA/FP4 需新 kernel(未写) → 暂只 WMMA
-  *)               SM_ARCH="sm_${MAJOR}${MINOR}"; TC_HOPPER=0; TC_MAX=3 ;;  # 未知新架构兜底：按通用 WMMA
+  7.*)             SM_ARCH="sm_${MAJOR}${MINOR}"; TC_HOPPER=0; TC_MAX=0; TC_IDS="" ;;          # Volta/Turing：无 bf16 WMMA → 跳过张量核(只跑 CUDA core)
+  8.0)             SM_ARCH="sm_80";               TC_HOPPER=0; TC_MAX=3; TC_IDS="1 2 3 6" ;;   # Ampere 数据中心 A100/A800
+  8.6|8.7|8.9)     SM_ARCH="sm_${MAJOR}${MINOR}"; TC_HOPPER=0; TC_MAX=3; TC_IDS="1 2 3 6" ;;   # Ampere 图形 A10/A10G/A40 · Ada L4/L40S(有 FP8 硬件，但本仓库 FP8 走 Hopper WGMMA → 只 WMMA+mma.sync)
+  9.*)             SM_ARCH="sm_90a";              TC_HOPPER=1; TC_MAX=5; TC_IDS="1 2 3 4 5 6" ;;# Hopper H100/H200/H20：WGMMA+TMA+FP8 全家桶 + mma.sync 对照
+  10.*|11.*|12.*)  SM_ARCH="sm_${MAJOR}${MINOR}"; TC_HOPPER=0; TC_MAX=3; TC_IDS="1 2 3 6" ;;   # Blackwell B200/RTX50：WMMA+mma.sync 可用；UMMA/FP4 需新 kernel(未写)
+  *)               SM_ARCH="sm_${MAJOR}${MINOR}"; TC_HOPPER=0; TC_MAX=3; TC_IDS="1 2 3 6" ;;   # 未知新架构兜底：按通用 WMMA+mma.sync
 esac
 export CUDA_VISIBLE_DEVICES="$GPU"
 log ""
-log " GPU: $GPU_NAME | CC $CC → ARCH=-arch=$SM_ARCH TC_HOPPER=$TC_HOPPER (tensor 1-$TC_MAX) | max ${MAXCLK:-?}MHz"
+log " GPU: $GPU_NAME | CC $CC → ARCH=-arch=$SM_ARCH TC_HOPPER=$TC_HOPPER (tensor ids: ${TC_IDS:-none}) | max ${MAXCLK:-?}MHz"
 
 # kernel 名（用于逐示例日志文件名；与各 bench/verify 驱动的注册表一致）
 FP32_NAMES=(cublas_ref naive smem blocktiling 2Dblocktiling vectorized autotune_64x64x8_8x4 autotune_64x64x16_8x4 autotune_64x64x8_8x8 warptile warptile_vec bank_conflict double_buffer)
 BF16_NAMES=(cublas_bf16 naive smem blocktiling 2Dblocktiling vectorized autotune_64x64x8_8x4 autotune_64x64x16_8x4 autotune_64x64x8_8x8 warptile warptile_vec bank_conflict double_buffer)
-TC_NAMES=(_ tc01_wmma_naive tc02_wmma_smem tc03_wmma_pipe tc04_wgmma_tma_ws tc05_wgmma_fp8)  # 下标从 1 起
+TC_NAMES=(_ tc01_wmma_naive tc02_wmma_smem tc03_wmma_pipe tc04_wgmma_tma_ws tc05_wgmma_fp8 tc06_mma_pipe)  # 下标=id(从 1 起)
 
 # ---------------------------------------------------------------------------
 # 2. 可选锁频（trap 退出解锁）
@@ -201,7 +204,7 @@ TC_B="$BDIR/tensor_core/bench"; TC_V="$BDIR/tensor_core/verify"
 V=$VERIFY_SIZE
 verify_fp32(){ for id in $(seq 0 12); do per_ex verify/cuda_core_fp32 "$CC_V" "$id" "${FP32_NAMES[$id]}" "$V" "$V" "$V"; done; }
 verify_bf16(){ for id in $(seq 0 12); do per_ex verify/cuda_core_bf16 "$BF_V" "$id" "${BF16_NAMES[$id]}" "$V" "$V" "$V"; done; }
-verify_tc(){   for id in $(seq 1 "$TC_MAX"); do per_ex verify/tensor_core "$TC_V" "$id" "${TC_NAMES[$id]}" "$V" "$V" "$V"; done; }
+verify_tc(){   for id in $TC_IDS; do per_ex verify/tensor_core "$TC_V" "$id" "${TC_NAMES[$id]}" "$V" "$V" "$V"; done; }
 timed "03_verify_fp32" verify_fp32
 timed "04_verify_bf16" verify_bf16
 timed "05_verify_tc"   verify_tc
@@ -212,7 +215,7 @@ timed "05_verify_tc"   verify_tc
 SIZES_TO_RUN="${BENCH_SIZE_SET:-$BENCH_SIZE}"
 bench_fp32(){ local S=$1; for id in $(seq 0 12); do per_ex "bench/cuda_core_fp32" "$CC_B" "$id" "${FP32_NAMES[$id]}_${S}" "$S" "$S" "$S"; done; }
 bench_bf16(){ local S=$1; for id in $(seq 0 12); do per_ex "bench/cuda_core_bf16" "$BF_B" "$id" "${BF16_NAMES[$id]}_${S}" "$S" "$S" "$S"; done; }
-bench_tc(){   local S=$1; for id in $(seq 1 "$TC_MAX"); do per_ex "bench/tensor_core" "$TC_B" "$id" "${TC_NAMES[$id]}_${S}" "$S" "$S" "$S"; done; }
+bench_tc(){   local S=$1; for id in $TC_IDS; do per_ex "bench/tensor_core" "$TC_B" "$id" "${TC_NAMES[$id]}_${S}" "$S" "$S" "$S"; done; }
 for SZ in $SIZES_TO_RUN; do
   timed "06_bench_fp32_${SZ}" bench_fp32 "$SZ"
   timed "07_bench_bf16_${SZ}" bench_bf16 "$SZ"
@@ -228,6 +231,7 @@ if [ "$DO_SCALING" = 1 ]; then
     echo -n '[FP32 double_buf] '; $CC_B 12 \$sz \$sz \$sz | grep -oE 'GFLOPS=[0-9.]+'; \
     echo -n '[BF16 cublas]     '; $BF_B 0 \$sz \$sz \$sz  | grep -oE 'GFLOPS=[0-9.]+'; \
     echo -n '[WMMA tc_03_pipe] '; $TC_B 3 \$sz \$sz \$sz  | grep -oE 'GFLOPS=[0-9.]+'; \
+    echo -n '[mma. tc_06_pipe] '; $TC_B 6 \$sz \$sz \$sz  | grep -oE 'GFLOPS=[0-9.]+'; \
     done"
 fi
 

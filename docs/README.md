@@ -33,11 +33,12 @@ docs/
 | FP32 手写最佳 | 25.1 TFLOPS | 17.6 TFLOPS（90%峰/93%cuBLAS） | |
 | **BF16 张量核峰值** | **148 TFLOPS** | **312 TFLOPS** | **A800 是 H20 的 2.1×** |
 | **BF16 cuBLAS** | 134 TFLOPS（锁频，91%峰） | **264.7 TFLOPS**（锁频，85%峰） | **A800 ≈ H20 的 2.0×** |
-| 手写张量核最佳(BF16) | **120.6 TFLOPS**（tc_04 WGMMA, 82%峰） | 43.1 TFLOPS（tc_03 WMMA, 14%峰） | A800 **无 WGMMA/TMA/FP8** |
+| 手写张量核最佳(BF16) | **120.6 TFLOPS**（tc_04 WGMMA, 82%峰） | **150.3 TFLOPS**（tc_06 mma.sync, 48%峰）| A800 补齐 mma.sync 后**绝对值反超** H20 手写(峰厚 2.1×) |
+| ↳ 补 mma.sync 前 | — | 43.1 TFLOPS（tc_03 WMMA, 14%峰） | tc_06 = 3.49× tc_03 |
 | **FP8 张量核峰值** | **296 TFLOPS**（=2×BF16） | **不支持**（Ampere 无 FP8） | |
 | 手写 FP8 (WGMMA) | **226.1 TFLOPS**（tc_05, **76% 的 FP8 峰**） | — | 对 FP8 峰算利用率(非 BF16 峰，否则=153% 假象) |
 
-**一句话对比**：H20 = 带宽厚、FP32 高、BF16 张量核薄(148T)但有 WGMMA 吃满；A800 = **BF16 张量核厚(312T)、FP32 薄，但无 WGMMA**——手写只能到 WMMA(13.8%)，要吃满 312T 得靠 cuBLAS/CUTLASS（Ampere 原生 `mma.sync`+`ldmatrix`）。做 BF16 GEMM 选 A800，纯 FP32 选 H20。
+**一句话对比**：H20 = 带宽厚、FP32 高、BF16 张量核薄(148T)但有 WGMMA 吃满；A800 = **BF16 张量核厚(312T)、FP32 薄，无 WGMMA 但有 mma.sync**——手写从 WMMA(14%) 补到 **Ampere 原生 `mma.sync`+`ldmatrix`+cp.async 的 tc_06(48%,150.3T)**，绝对值已超 H20 手写最佳(120.6T)；再往 85% 才需 cuBLAS/CUTLASS。做 BF16 GEMM 选 A800，纯 FP32 选 H20。
 
 > ⚠️ **对比 MFU 必看时钟策略**：GFLOPS 随实际 SM 时钟线性变化，A800 默认 boost 在重张量负载只跑 ~1140–1215MHz（非额定 1410），公开基准/默认时钟 ≈ 78% 峰、锁频 ≈ 94% 峰，效率其实一致。详见 [a800 总结 §5](a800/A800%20GEMM%20复现总结.md)。
 
