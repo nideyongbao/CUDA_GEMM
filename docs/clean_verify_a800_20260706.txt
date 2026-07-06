@@ -1,0 +1,44 @@
+== verify (correctness) ==
+### GEMM cuda_core (vs cuBLAS) @2048
+max_abs_err = 0.000000e+00
+max_rel_err = 0.000000e+00
+bad_count   = 0 / 4194304
+PASS
+max_abs_err = 0.000000e+00
+max_rel_err = 0.000000e+00
+bad_count   = 0 / 4194304
+PASS
+max_abs_err = 0.000000e+00
+max_rel_err = 0.000000e+00
+bad_count   = 0 / 4194304
+PASS
+max_abs_err = 0.000000e+00
+max_rel_err = 0.000000e+00
+bad_count   = 0 / 4194304
+PASS
+max_abs_err = 0.000000e+00
+max_rel_err = 0.000000e+00
+bad_count   = 0 / 4194304
+PASS
+max_abs_err = 0.000000e+00
+max_rel_err = 0.000000e+00
+bad_count   = 0 / 4194304
+PASS
+### GEMM tensor_core (vs cuBLAS) @2048
+[tc_01 WMMA_naive] VERIFY max_abs=0.000e+00 bad=0/4194304  PASS
+[tc_02 WMMA_smem] VERIFY max_abs=0.000e+00 bad=0/4194304  PASS
+[tc_03 WMMA_pipe] VERIFY max_abs=0.000e+00 bad=0/4194304  PASS
+[tc_06 MMA_pipe] VERIFY max_abs=0.000e+00 max_rel=0.000e+00 bad=0/4194304  PASS
+### softmax (vs CPU double)
+sc_01_naive          M=1024 N=2048  max_abs=2.328e-08 max_rel=4.241e-06 bad=0/2097152  PASS
+sc_02_block_reduce   M=1024 N=2048  max_abs=1.863e-09 max_rel=1.962e-06 bad=0/2097152  PASS
+sc_03_warp_shuffle   M=1024 N=2048  max_abs=2.794e-09 max_rel=2.042e-06 bad=0/2097152  PASS
+sc_04_vectorized     M=1024 N=2048  max_abs=1.863e-09 max_rel=1.996e-06 bad=0/2097152  PASS
+sc_05_online         M=1024 N=2048  max_abs=1.863e-09 max_rel=1.971e-06 bad=0/2097152  PASS
+### FA tensor_core (vs CPU attn)
+tfa_mma verify B=2 H=8 S=512 D=128 causal=0  max_abs=3.183e-04 max_rel=5.626e-01 bad=0/1048576  PASS
+tfa_mma verify B=2 H=8 S=512 D=128 causal=0  max_abs=2.810e-03 max_rel=7.291e+00 bad=0/1048576  PASS
+tfa_mma verify B=2 H=8 S=512 D=64 causal=1  max_abs=4.772e-04 max_rel=7.728e+00 bad=0/524288  PASS
+### FA cuda_core scaffold (vs CPU attn)
+fa_cc_01_stream  B=2 H=4 S=256 D=64 causal=0  max_abs=7.749e-07 max_rel=2.355e-04 bad=0/131072  PASS
+fa_cc_02_tiled   B=2 H=4 S=256 D=64 causal=0  max_abs=7.749e-07 max_rel=2.355e-04 bad=0/131072  PASS

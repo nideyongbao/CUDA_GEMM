@@ -14,10 +14,18 @@
 | 全量 build（3 算子） | ✅ 完成 | `make all` 全绿；`gemm/{cuda_core,tensor_core}`、`softmax/cuda_core`、`flash_attn/{cuda_core,tensor_core}` 全部产出 bench/verify 二进制 |
 | 正确性对拍（3 算子） | ✅ 全 PASS | GEMM vs cuBLAS；softmax vs CPU double；FA(tensor_core+cuda_core) vs CPU 参考注意力。与争用无关，稳定复现 |
 | 逐级分析文档 + 结论 | ✅ 完成 | `gemm/docs/`（含 CUDA_GEMM A800 原文 + ncu 全量 details）、`softmax/docs/`、`flash_attn/docs/`、`docs/CURRICULUM.md`、`README.md` |
-| GEMM 性能复现 | ✅ 已证（构造 + 实测地面真值） | 见下 §GEMM |
-| FA 性能复现 | ✅ 按构造已证；⏳ 经验值待空闲卡回填 | 见下 §FA |
-| softmax 性能 | ⏳ 待空闲卡回填 | 新算子，无对照源；`run_all.sh` 一条命令即出 |
-| 全量 ncu | ⏳ 待空闲卡回填 | `common/run_ncu.sh` 已就绪；GEMM 部分已带 CUDA_GEMM 的 canonical `*.details.txt` |
+| GEMM 性能复现 | ✅ **已闭环**（构造 + 干净卡实测） | tc_06=150.3T 与 CUDA_GEMM 文档逐项吻合，见下 §GEMM |
+| FA 性能复现 | ✅ **已闭环**（构造 + 干净卡实测） | fp16 206.7T / bf16 208.9T，复现 TinyFA 量级，见下 §FA |
+| softmax 性能 | ✅ **已闭环** | sc_05 online 1211 GB/s（59.4% 屋顶），见下 §softmax |
+| 全量 ncu | ✅ **已采** | 6 份 `*/baselines/*.details.txt`（干净锁频卡，`ncu --set full`） |
+
+## 复现闭环结果（2026-07-06，干净 A800 空闲卡，锁频 1410MHz，快照 `result/20260706_063155/`）
+
+**GEMM tensor_core**：tc_01 17.8 → tc_02 27.1 → tc_03 43.1 → **tc_06 150.3 TFLOPS = 48.2% 峰 = 3.49× tc_03**。→ 与 CUDA_GEMM 的 A800 归档「150.3T / 48.2% / 3.49×」**逐项吻合**。ncu：`mma_pipe_kernel` Compute 48.7% / L1-TEX 76.5% / 占用 24.3% / 123 regs。
+**GEMM FP32 cuda_core**：手写最佳 vectorized 17.6T / warptile_vec 17.4T（≈ FP32 峰值 89%）。ncu：`double_buffer` Compute(SM) 90.7% / 占用 23.2%（compute-bound，低占用不碍事）。
+**softmax**：sc_01 77 → sc_02 908 → sc_03 834 → sc_04 1034 → **sc_05 online 1211 GB/s（59.4% 屋顶）**。ncu：`sc05_online_kernel` DRAM 87.2% / **1.78 TB/s** / 占用 94.2%。
+**FA tensor_core (TinyFA)**：fp16 **206.7** / bf16 **208.9** / fp16-causal 177.3 TFLOPS（复现 TinyFA A100 194/200T 量级，A800≈A100）。ncu：`flashAttentionKernel` Compute 67.9% / 占用 12.3%（ILP 藏延迟）。
+**FA cuda_core 脚手架**：fa_cc_02 0.94 / fa_cc_01 0.46 TFLOPS → 张量核比 CUDA 核快 **~220×**，实证"注意力 matmul 必须上张量核"。
 
 ## §GEMM — 已复现（构造证明 + 实测地面真值）
 

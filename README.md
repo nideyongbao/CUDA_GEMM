@@ -173,23 +173,42 @@ flash_attn/build/cuda_core/verify 2 2 4 256 64 0          # fa_cc_02 tiled 对�
 
 | 级 | id | 用例 | GFLOPS | TFLOPS | %峰值(312T) |
 | --- | ---: | --- | ---: | ---: | ---: |
-| ① | 1 | tc_01 wmma_naive | 15570 | 15.6 | 5.0% |
-| ② | 2 | tc_02 wmma_smem | 23388 | 23.4 | 7.5% |
-| ③ | 3 | tc_03 wmma_pipe (cp.async) | 34601 | 34.6 | 11.1% |
-| ⑥ | 6 | **tc_06 mma_pipe** (mma.sync+ldmatrix+cp.async) | **110535** | **110.5** | **35.4%** |
+| ① | 1 | tc_01 wmma_naive | 17807 | 17.8 | 5.7% |
+| ② | 2 | tc_02 wmma_smem | 27108 | 27.1 | 8.7% |
+| ③ | 3 | tc_03 wmma_pipe (cp.async) | 43093 | 43.1 | 13.8% |
+| ⑥ | 6 | **tc_06 mma_pipe** (mma.sync+ldmatrix+cp.async) | **150333** | **150.3** | **48.2%** |
 
-> WMMA 三级（`load_matrix_sync`/`mma_sync`）被 L1/TEX 喂数打满，在 A800 止步 ~11% 峰；**tc_06** 换成 Ampere 原生 `mma.sync.m16n8k16` + `ldmatrix`（消 bank 冲突）+ 多级 `cp.async`，把手写拉到 **110.5 TFLOPS = 312T 的 35.4%**（= WMMA `tc_03` 的 3.2×）。**tc_06 就是 FA tensor_core 复用的那把张量核基元。** 
+> WMMA 三级（`load_matrix_sync`/`mma_sync`）被 L1/TEX 喂数打满，在 A800 止步 ~14% 峰；**tc_06** 换成 Ampere 原生 `mma.sync.m16n8k16` + `ldmatrix`（消 bank 冲突）+ 多级 `cp.async`，把手写拉到 **150.3 TFLOPS = 312T 的 48.2%**（= WMMA `tc_03` 的 **3.49×**）。**tc_06 就是 FA tensor_core 复用的那把张量核基元。**
+> ✅ **精确复现**：本机干净卡（GPU 空闲、锁频 1410MHz）实测 tc_06 = **150.3 TFLOPS = 48.2% 峰 = 3.49× tc_03**，与 CUDA_GEMM 的 A800 归档文档（`gemm/docs/a800/`：「锁频 4096³ 实测 48.2%（150.3T/312T）= 3.49× tc_03」）**逐项吻合**。ncu：`mma_pipe_kernel` Compute(SM) 48.7% / L1-TEX(Memory) 76.5% / 占用率 24.3% / 123 寄存器每线程（寄存器压力墙，即 A800 文档所述"可读 CUDA C++ 天花板 ~48%"）。
 > 口径说明：`bench` 二进制打印的内建 `util(vs148T)` 列沿用 H20 教程写死的 148T 分母（故显示 10.5%/15.8%/23.4%…）；A800 的真实 MFU 请以上表的 **%峰值(312T)** 为准。tc_06 的深度剖析（ncu 证据、为何纯 CUDA C++ 上限约 35–48%）见 `gemm/docs/a800/Ampere mma.sync 张量核.md`。Hopper 独占的 `tc_04`(WGMMA+TMA)/`tc_05`(FP8) 在 A800 无对应指令、不编译。
 
-### softmax / FlashAttention 性能数字：待 `run_all.sh` 在空闲 GPU 回填
+### softmax cuda_core（`softmax/build/cuda_core/bench <id> 8192 8192`，锁频 1410MHz）
 
-`softmax/baselines/` 与 `flash_attn/baselines/` 目前**为空**——这是**有意为之**：
+访存受限归约；口径 = 有效 HBM 带宽（理想流量 2·M·N·4 字节 ÷ 实测时间），分母 A800 HBM 峰值 2039 GB/s。
 
-- **本开发机在编写期间被一套 8 卡 vLLM 服务长期占用**，`bench` 的计时会被算力争用严重污染（GPU busy>4GB 时 `run_all.sh` 会打 `WARNING`）。因此**所有 timing 运行都门控在"GPU 空闲"这一前提上**：在一块空闲卡上 `bash run_all.sh`，`02_bench.log` 会自动填入 softmax 的 **有效 HBM 带宽（GB/s，÷2039 得屋顶线占比）** 与 FA 的 **TFLOPS**，并快照到 `result/<ts>/`。
-- **正确性与算力争用无关（contention-immune），且已经 PASS**：`verify` 对拍的是 cuBLAS / CPU double / CPU 参考注意力，结果不受同机其它进程影响。无论 GPU 是否被 vLLM 占着，`01_verify.log` 都稳定全绿。
-- **GEMM 数字之所以已在表内**，是因为 CUDA_GEMM 的 GROUNDTRUTH 恰好在一段**瞬时空闲**窗口锁频采得；`gemm/` 用相同 kernel，干净卡上按构造复现。softmax/FA 只等下一个空闲窗口跑一遍 `run_all.sh` 即补全。
+| id | kernel | 单一 delta | 时间(ms) | 有效带宽(GB/s) | %屋顶(2039) |
+| ---: | --- | --- | ---: | ---: | ---: |
+| 1 | sc_01 naive | 一线程一行（非合并） | 6.970 | 77.0 | 3.8% |
+| 2 | sc_02 block_reduce | 一块一行 + smem 树归约（合并） | 0.591 | 908.2 | 44.5% |
+| 3 | sc_03 warp_shuffle | 寄存器 shuffle 归约（去 smem/同步） | 0.644 | 834.2 | 40.9% |
+| 4 | sc_04 vectorized | float4 128-bit 访存 | 0.519 | 1034.2 | 50.7% |
+| 5 | **sc_05 online** | **max/sum 融合成一趟流式（3 读→2 读）** | **0.443** | **1211.5** | **59.4%** |
 
-> 一句话：**正确性现在就能全绿（与争用无关）；性能数字只差一块空闲的 A800 + 一条 `bash run_all.sh`。**
+> `sc_05 online` = **最快**（1211 GB/s，比 `sc_04` 再 +17%）——正是"把 x 的三趟读压成两趟"的访存节省。ncu：`sc05_online_kernel` DRAM 吞吐 **87.2% / 1.78 TB/s**、占用率 94.2%（访存屋顶线已接近打满）。**这一趟流式 (m,l) 递推就是 FA 内层复用的 online softmax。**
+
+### FlashAttention（`flash_attn/build/*/bench`，锁频 1410MHz）
+
+| 引擎 | 配置 | 时间(ms) | TFLOPS | 说明 |
+| --- | --- | ---: | ---: | --- |
+| **tensor_core (TinyFA)** | fp16 B2 H32 S4096 D128 | 2.659 | **206.7** | 复现 TinyFA（A100 自述 194T）——A800≈A100 |
+| tensor_core (TinyFA) | bf16 同上 | 2.632 | **208.9** | 复现 TinyFA（A100 自述 200T） |
+| tensor_core (TinyFA) | fp16 causal | 1.550 | 177.3 | causal 只算下三角 |
+| cuda_core 脚手架 | fa_cc_02 tiled, fp32 B2 H16 S2048 D64 | 36.50 | 0.94 | fp32 CUDA 核 |
+| cuda_core 脚手架 | fa_cc_01 stream, 同上 | 74.84 | 0.46 | 每线程一 query |
+
+> **张量核 vs CUDA 核 = 206.7 / 0.94 ≈ 220×**——一句话钉死"注意力的两次 matmul 必须上张量核"。TinyFA 前向在 A800 达 **206–209 TFLOPS**，落在其 A100 自述 194–200T 的同一量级（A800 与 A100 张量核规格相同），**按构造复现**。ncu：`flashAttentionKernel` Compute(SM) **67.9%** / 占用率仅 **12.3%**——FA 靠 ILP+异步流水藏延迟、不靠高占用率（与 GEMM `tc_06` 占用 24% 同理）。
+
+> ✅ **复现闭环已完成**：以上 GEMM / softmax / FA 全部数字为**本机干净 A800、锁频 1410MHz** 实测（快照见 `result/latest/`，ncu details 见各 `*/baselines/`）。GEMM 与 FA 用与 CUDA_GEMM / TinyFA **相同的 kernel**，数字按构造一致；tc_06=150.3T 更与 CUDA_GEMM 归档文档逐项吻合。
 
 ---
 
