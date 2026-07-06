@@ -12,14 +12,14 @@ NVCC := nvcc
 #   ** Blackwell 的 WGMMA 换成了 tcgen05/UMMA、并新增 FP4——需另写 kernel，暂只跑通用 WMMA。
 # sm_90a 的 'a' = architecture-specific：WGMMA/TMA 等 Hopper 指令**必须**用它(不能用 sm_90)。
 # 各卡的峰值/精度支持是 scripts/gpu_specs.py 这一份表说了算(汇总报告算 MFU 用它)。
-ARCH ?= -arch=sm_80
+ARCH ?= -arch=sm_90a
 INCLUDES := -I include
 OPT := -O3
 
 # TC_HOPPER=1（默认，H20）编译全部 5 个 tensor_core 用例（含 WGMMA/TMA/FP8，需 driver API）。
 # TC_HOPPER=0（A800/Ampere）只编译 tc_01-03（WMMA / cp.async），并用 -DNO_HOPPER 让派发表
 # 跳过 tc_04(WGMMA+TMA) / tc_05(FP8) —— 这两者是 Hopper sm_90 独占指令，Ampere 无法运行。
-TC_HOPPER ?= 0
+TC_HOPPER ?= 1
 
 # 编译产物输出目录（out-of-source）：所有 .o 与可执行文件都进 $(BUILD)/，代码目录(kernels/)保持干净。
 #   手动 make 默认输出到 build/；run_all.sh 传 BUILD=result/<时间戳>/build 让产物随快照走。

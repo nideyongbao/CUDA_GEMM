@@ -1,0 +1,24 @@
+# softmax ground-truth on NVIDIA H20 (sm_90a, SM 1980MHz, HBM3 4000 GB/s peak)
+# effective BW = read x + write y = 2*M*N*4 bytes / time
+
+== VERIFY (vs CPU double, allclose) @1024x2048 ==
+sc_01_naive          M=1024 N=2048  max_abs=2.328e-08 max_rel=4.241e-06 bad=0/2097152  PASS
+sc_02_block_reduce   M=1024 N=2048  max_abs=1.863e-09 max_rel=1.962e-06 bad=0/2097152  PASS
+sc_03_warp_shuffle   M=1024 N=2048  max_abs=2.794e-09 max_rel=2.042e-06 bad=0/2097152  PASS
+sc_04_vectorized     M=1024 N=2048  max_abs=1.863e-09 max_rel=1.996e-06 bad=0/2097152  PASS
+sc_05_online         M=1024 N=2048  max_abs=1.863e-09 max_rel=1.971e-06 bad=0/2097152  PASS
+sc_06_resident       M=1024 N=2048  max_abs=1.863e-09 max_rel=1.989e-06 bad=0/2097152  PASS
+
+== BENCH @8192x8192 (%% of H20 4000 GB/s) ==
+sc_01_naive          M=8192 N=8192  time=5.2165 ms  eff_BW=102.9 GB/s  (2.6% of 4000)
+sc_02_block_reduce   M=8192 N=8192  time=0.2155 ms  eff_BW=2491.3 GB/s  (62.3% of 4000)
+sc_03_warp_shuffle   M=8192 N=8192  time=0.3228 ms  eff_BW=1663.3 GB/s  (41.6% of 4000)
+sc_04_vectorized     M=8192 N=8192  time=0.1697 ms  eff_BW=3163.7 GB/s  (79.1% of 4000)
+sc_05_online         M=8192 N=8192  time=0.1746 ms  eff_BW=3075.4 GB/s  (76.9% of 4000)
+sc_06_resident       M=8192 N=8192  time=0.2084 ms  eff_BW=2575.8 GB/s  (64.4% of 4000)
+
+== BENCH @16384x16384 (larger, more BW-saturating) ==
+sc_02_block_reduce   M=16384 N=16384  time=1.2884 ms  eff_BW=1666.8 GB/s  (41.7% of 4000)
+sc_04_vectorized     M=16384 N=16384  time=0.8794 ms  eff_BW=2442.0 GB/s  (61.1% of 4000)
+sc_05_online         M=16384 N=16384  time=0.8761 ms  eff_BW=2451.1 GB/s  (61.3% of 4000)
+sc_06_resident       M=16384 N=16384  time=0.6037 ms  eff_BW=3557.4 GB/s  (88.9% of 4000)

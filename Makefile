@@ -1,5 +1,5 @@
-# cuda-ops-a800 — top-level dispatch. Each operator is a self-contained
-# CUDA_GEMM-style module (kernels/ include/ docs/ baselines/). A800 sm_80.
+# cuda-ops-h20 — top-level dispatch. Each operator is a self-contained
+# CUDA_GEMM-style module (kernels/ include/ docs/ baselines/). H20 Hopper sm_90a.
 .PHONY: all gemm softmax flash_attn clean
 all: gemm softmax flash_attn
 

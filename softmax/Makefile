@@ -1,6 +1,6 @@
-# softmax operator — A800 sm_80. Mirrors the GEMM operator's out-of-source build.
+# softmax operator — H20 sm_90a. Mirrors the GEMM operator's out-of-source build.
 NVCC := nvcc
-ARCH ?= -arch=sm_80
+ARCH ?= -arch=sm_90a
 INCLUDES := -I include
 OPT := -O3 -use_fast_math
 NVCCFLAGS := $(ARCH) $(INCLUDES) $(OPT)

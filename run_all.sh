@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cuda-ops-a800 one-shot: pick a free A800, lock clocks, build + verify + bench
+# cuda-ops-h20 one-shot: pick a free H20, lock clocks, build + verify + bench
 # (+ optional ncu) for all three operators, snapshot to result/<timestamp>/.
 #
 #   bash run_all.sh              # auto-pick freest GPU, build+verify+bench
@@ -8,7 +8,7 @@
 #   bash run_all.sh --no-lock    # skip clock lock (no sudo)
 set -u
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-GPU=""; LOCK=1; NCU=0; SM_CLK=1410
+GPU=""; LOCK=1; NCU=0; SM_CLK=1980   # H20 boost SM clock
 while [ $# -gt 0 ]; do case "$1" in
   --gpu) GPU="$2"; shift 2;; --ncu) NCU=1; shift;; --no-lock) LOCK=0; shift;;
   *) echo "unknown arg $1"; exit 1;; esac; done
@@ -40,7 +40,7 @@ VERIFY="$OUT/01_verify.log"; BENCH="$OUT/02_bench.log"; : > "$VERIFY"; : > "$BEN
 echo "== verify (correctness) ==" | tee -a "$VERIFY"
 {
   echo "### GEMM cuda_core (vs cuBLAS) @2048"; for id in 1 2 4 5 10 12; do "$ROOT"/gemm/build/cuda_core/verify $id 2048 2048 2048; done
-  echo "### GEMM tensor_core (vs cuBLAS) @2048"; for id in 1 2 3 6; do "$ROOT"/gemm/build/tensor_core/verify $id 2048 2048 2048; done
+  echo "### GEMM tensor_core (WMMA/WGMMA/FP8 vs cuBLAS) @2048"; for id in 1 2 3 4 5 6; do "$ROOT"/gemm/build/tensor_core/verify $id 2048 2048 2048; done
   echo "### softmax (vs CPU double)"; for id in 1 2 3 4 5 6; do "$ROOT"/softmax/build/cuda_core/verify $id 1024 2048; done
   echo "### FA tensor_core (vs CPU attn)"; for c in "fp16 2 8 512 128 0" "bf16 2 8 512 128 0" "fp16 2 8 512 64 1"; do "$ROOT"/flash_attn/build/tensor_core/verify $c; done
   echo "### FA cuda_core scaffold (vs CPU attn)"; for id in 1 2; do "$ROOT"/flash_attn/build/cuda_core/verify $id 2 4 256 64 0; done
@@ -49,9 +49,9 @@ echo "== verify (correctness) ==" | tee -a "$VERIFY"
 echo "== bench (performance @ locked clock) ==" | tee -a "$BENCH"
 {
   echo "### GEMM FP32 cuda_core @4096"; for id in 1 2 3 4 5 9 10 11 12; do "$ROOT"/gemm/build/cuda_core/bench $id 4096 4096 4096; done
-  echo "### GEMM tensor_core @4096"; for id in 1 2 3 6; do "$ROOT"/gemm/build/tensor_core/bench $id 4096 4096 4096; done
+  echo "### GEMM tensor_core (WMMA→WGMMA→FP8) @4096"; for id in 1 2 3 4 5 6; do "$ROOT"/gemm/build/tensor_core/bench $id 4096 4096 4096; done
   echo "### softmax @8192x8192"; for id in 1 2 3 4 5 6; do "$ROOT"/softmax/build/cuda_core/bench $id 8192 8192; done
-  echo "### FA tensor_core (TinyFA) B2 H32 S4096 D128"; for c in "fp16 2 32 4096 128 0" "bf16 2 32 4096 128 0" "fp16 2 32 4096 128 1"; do "$ROOT"/flash_attn/build/tensor_core/bench $c; done
+  echo "### FA tensor_core (Hopper WGMMA+TMA) B2 H32 S4096 D128"; for c in "fp16 2 32 4096 128 0" "bf16 2 32 4096 128 0" "bf16 2 32 4096 128 1"; do "$ROOT"/flash_attn/build/tensor_core/bench $c; done
   echo "### FA cuda_core scaffold B2 H16 S2048 D64"; for id in 1 2; do "$ROOT"/flash_attn/build/cuda_core/bench $id 2 16 2048 64 0; done
 } 2>&1 | tee -a "$BENCH"
 

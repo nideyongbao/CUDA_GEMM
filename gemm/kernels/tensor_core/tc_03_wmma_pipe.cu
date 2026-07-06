@@ -1,5 +1,5 @@
 // ============================================================================
-// tc_03 — WMMA + cp.async 多级流水线（第 ③ 级，Ampere 风格）
+// tc_03 — WMMA + cp.async 多级流水线（第 ③ 级：nvcuda::wmma API 的天花板）
 //
 // 相对 tc_02 的改动：① 更大 block tile(128×64) 提高复用；② shared memory 改成
 // NSTAGES=3 级 ring buffer；③ 用 cp.async 异步预取后续 K-tile，让"搬下一块"和

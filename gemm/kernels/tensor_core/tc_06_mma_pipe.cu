@@ -1,16 +1,17 @@
 // ============================================================================
-// tc_06 — mma.sync + ldmatrix + 多级 cp.async（第 ⑥ 级，Ampere 原生 BF16）
+// tc_06 — mma.sync + ldmatrix + 多级 cp.async（第 ⑥ 级，warp 级 MMA baseline）
 //
 // 为什么有这一级：tc_01→03 的 `nvcuda::wmma` C++ API 到头了——它固定 16×16×16
-// fragment、load/store 有开销、寄存器与调度不可控，A800 上 tc_03 止步 ~43T(14% 峰)。
+// fragment、load/store 有开销、寄存器与调度不可控，H20 上 tc_03 止步 ~38T(26% 峰)。
 // 要逼近峰值必须**绕开 WMMA API**，直接用底层 PTX：
 //   · mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32   —— warp 级张量核 MMA
 //   · ldmatrix.sync.aligned.m8n8.x4/.x2                     —— 从 smem 直接喂 fragment
 //   · cp.async.cg（16B 向量化）+ K_STAGE 级 ring buffer      —— 异步多级预取
-// 这正是 CUTLASS 风格 Ampere GEMM 的核心，也是 tc_03(WMMA) 与 tc_04(Hopper WGMMA)
-// 之间缺的"承上启下"一级。mma.sync/ldmatrix/cp.async 都是 sm_80+ 通用指令，故本用例
-// 在 A800 与 H20 上都能编都能跑（**始终注册**，不放进 #ifndef NO_HOPPER）；在 Hopper
-// 上作为"mma.sync(warp) vs WGMMA(warpgroup)"的对照。
+// 这正是 CUTLASS 风格 pre-Hopper GEMM 的核心，也是 tc_03(WMMA) 与 tc_04(Hopper WGMMA)
+// 之间缺的"承上启下"一级。mma.sync/ldmatrix/cp.async 都是 sm_80+ 通用指令，在 H20 上
+// 原生可跑（**始终注册**，不放进 #ifndef NO_HOPPER）；它是"warp 级 mma.sync vs
+// warpgroup 级 WGMMA(tc_04)"这条 Hopper 对照线的下界——H20 上 tc_06≈74T(50%峰)，而
+// 走 WGMMA/TMA 的 cuBLAS(tc_04) 到 89%，差距正是本课要讲的 Hopper 异步张量核红利。
 //
 // 布局：A(M×K) row-major，B(K×N) row-major；内部把 B 转成 Bt(N×K) row-major(只做一次，
 //   不计入计时)，使 A、Bt 两个 smem tile 都以 K 连续 —— A、B fragment 走**同一条非转置
@@ -26,12 +27,12 @@
 #include "../../include/tc_common.cuh"   // TC_CHECK_*, tc_f2bf, tc_cublas_bf16（均 static inline，无链接冲突）
 
 // ---- 张量核配置（可编译期 -DTC06_* 覆盖以复现调优扫描）----
-// A800 锁频 4096³ 调优结论(见 docs/a800，约 25 组配置)：下方默认(BM128 BN128 BK32 · W2×4 · 3 级)
-//   最优，≈150T=48%峰=3.5×tc_03。更大 warp tile 的数据复用/ILP 比提高占用率(kernel 受寄存器限
+// H20 锁频 4096³ 调优结论(见 docs/h20)：下方默认(BM128 BN128 BK32 · W2×4 · 3 级)
+//   最优，≈74T=50%峰=~1.9×tc_03。更大 warp tile 的数据复用/ILP 比提高占用率(kernel 受寄存器限
 //   122 regs→2 block/SM)更划算；BK64/16-warp/BN256 均更差；朴素 XOR swizzle 与 B 用 x4 装载
 //   都未跑赢"padding + B 用 x2"。**寄存器级 fragment 双缓冲实测也无益**(nvcc 对完全展开的内层循环
-//   本就自动软件流水)；强制 3 block/SM 也不提速(非占用率受限)——~48% 是纯 CUDA C++ 上限，再往
-//   60–85% 属 CUTLASS/SASS 级寄存器分配与指令调度(cuBLAS 走此路到 85%)。详见 docs/a800 §5-6。
+//   本就自动软件流水)。~50% 是纯 CUDA C++ + warp 级 mma.sync 的上限；再往 89% 属 Hopper 异步
+//   张量核(WGMMA warpgroup 指令 + TMA + smem 描述符)的红利——cuBLAS/tc_04 走此路。详见 docs/h20。
 #ifndef TC06_BM
 #define TC06_BM 128
 #endif
@@ -227,7 +228,7 @@ void tc06_bench(int M,int N,int K){
     float ms=0; cudaEventElapsedTime(&ms,s,e); ms/=rep;
     double gf=2.0*M*N*K/(ms/1e3)/1e9;
     // 注：%峰值不在此硬编（tc_common 的 148T 是 H20 口径）；真实利用率由 gemm_summary.py
-    //     按 gpu_specs 的本机 BF16 峰值(A800=312T)重算。这里只给 GFLOPS/TFLOPS。
+    //     按 gpu_specs 的本机 BF16 峰值(H20=148T)重算。这里只给 GFLOPS/TFLOPS。
     printf("[%s] M=%d N=%d K=%d  time=%.4f ms  GFLOPS=%.2f  TFLOPS=%.2f\n",
            TC06, M,N,K, ms, gf, gf/1000.0);
     cudaFree(dA);cudaFree(dB);cudaFree(dBt);cudaFree(dC);

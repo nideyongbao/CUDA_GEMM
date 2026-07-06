@@ -4,7 +4,7 @@
 # 用法: gemm_summary.py <RUN_DIR> <GPU_NAME> <CC> <CLOCK_POLICY> <MAXCLK_MHz>
 # 口径：GFLOPS 原始值 + 对 FP32 理论峰值 + 对 cuBLAS(库基线) + 对「对应精度」张量核峰值(MFU)。
 #   张量核每个用例按其精度选峰值：WMMA/WGMMA(bf16)→BF16 峰值；FP8→FP8 峰值(=2×BF16)；
-#   FP4→FP4 峰值(=4×BF16)。峰值/SM 数等设备事实统一来自 scripts/gpu_specs.py。
+#   FP4→FP4 峰值(=4×BF16)。峰值/SM 数等设备事实统一来自 common/gpu_specs.py。
 # ============================================================================
 import sys, os, re, glob
 
@@ -14,7 +14,7 @@ CC = sys.argv[3] if len(sys.argv) > 3 else "?"
 CLOCK_POLICY = sys.argv[4] if len(sys.argv) > 4 else "default"
 MAXCLK = float(sys.argv[5]) if len(sys.argv) > 5 and sys.argv[5] not in ("", "0") else None
 
-# ---- 设备算力：唯一事实表在 scripts/gpu_specs.py（BF16 峰值/SM 数；FP8=2×、FP4=4× 按 CC 推导）----
+# ---- 设备算力：唯一事实表在 common/gpu_specs.py（BF16 峰值/SM 数；FP8=2×、FP4=4× 按 CC 推导）----
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gpu_specs as G
 

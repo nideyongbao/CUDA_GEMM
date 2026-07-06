@@ -1,8 +1,8 @@
-// FA tensor-core verify — run tfa::flashAttn, compare against fp32 CPU attention.
-// fp16/bf16 tensor-core attention: atol/rtol ~2e-2 (matches TinyFA's tolerance).
+// FA tensor-core verify — hand-written Hopper WGMMA+TMA forward (fah::fa_hopper_fwd),
+// compared against fp32 CPU attention. bf16/fp16 tensor core: atol/rtol ~2e-2.
 //   usage: verify <fp16|bf16> [B H S D causal]   default: fp16 2 8 512 128 0
 #include "fa_common.h"
-#include "flash_api.cuh"
+#include "fa_hopper.cuh"
 
 template<typename T> __host__ T   f2t(float x);
 template<> __host__ __half        f2t<__half>(float x){ return __float2half(x); }
@@ -24,14 +24,16 @@ int run_verify(int B,int H,int S,int D,bool causal){
   CHECK_CUDA(cudaMemcpy(dQ,ht.data(),n*sizeof(T),cudaMemcpyHostToDevice));
   CHECK_CUDA(cudaMemcpy(dK,ht.data(),n*sizeof(T),cudaMemcpyHostToDevice));
   CHECK_CUDA(cudaMemcpy(dV,ht.data(),n*sizeof(T),cudaMemcpyHostToDevice));
-  tfa::flashAttn<T>(dQ,dK,dV,dO,B,S,S,H,H,D,causal,0);
+  CHECK_CUDA(cudaMemset(dO,0,n*sizeof(T)));
+  fah::fa_hopper_fwd<T>(dQ,dK,dV,dO,B,S,H,D,causal,0);
   CHECK_CUDA(cudaGetLastError()); CHECK_CUDA(cudaDeviceSynchronize());
   std::vector<T> hoT(n); CHECK_CUDA(cudaMemcpy(hoT.data(),dO,n*sizeof(T),cudaMemcpyDeviceToHost));
   double atol=2e-2,rtol=2e-2,maxa=0,maxr=0; size_t bad=0;
   for(size_t i=0;i<n;++i){ double a=t2f<T>(hoT[i]),b=ref[i],dd=fabs(a-b);
     maxa=dd>maxa?dd:maxa; double rl=dd/(fabs(b)+1e-30); maxr=rl>maxr?rl:maxr;
     if(dd>atol+rtol*fabs(b))++bad; }
-  printf("tfa_mma verify B=%d H=%d S=%d D=%d causal=%d  max_abs=%.3e max_rel=%.3e bad=%zu/%zu  %s\n",
+  printf("fa_hopper verify %-4s B=%d H=%d S=%d D=%d causal=%d  max_abs=%.3e max_rel=%.3e bad=%zu/%zu  %s\n",
+         fa_dtype_name(std::is_same<T,__nv_bfloat16>::value?FA_BF16:FA_FP16),
          B,H,S,D,causal,maxa,maxr,bad,n, bad==0?"PASS":"FAIL");
   cudaFree(dQ);cudaFree(dK);cudaFree(dV);cudaFree(dO);
   return bad==0?0:1;

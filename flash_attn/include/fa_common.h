@@ -1,6 +1,6 @@
-// flash_attn operator — shared harness: FLOP model (matches TinyFA benchmark.py),
+// flash_attn operator — shared harness: FLOP model (4·B·H·S²·D, halved for causal),
 // CPU reference attention (fp32, MHA/GQA), dtype helpers, cudaEvent median timing.
-// Tensor layout follows TinyFA:  Q/K/V/O = [batch, seq, heads, headDim] row-major.
+// Tensor layout:  Q/K/V/O = [batch, seq, heads, headDim] row-major.
 #pragma once
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
@@ -16,7 +16,7 @@
     fprintf(stderr,"CUDA %s:%d: %s\n",__FILE__,__LINE__,cudaGetErrorString(_e));\
     exit(1);} } while(0)
 
-// FLOPs (identical to TinyFA benchmarks/benchmark.py flops_fwd)
+// FLOPs: 2 matmuls (QKᵀ, PV), each 2·B·H·S²·D; halved for causal (lower triangle)
 inline double fa_flops(int B, int H, int S, int D, bool causal) {
   double f = 4.0 * B * H * (double)S * S * D;
   return causal ? f * 0.5 : f;

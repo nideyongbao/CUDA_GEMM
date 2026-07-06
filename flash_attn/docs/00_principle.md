@@ -2,7 +2,7 @@
 
 > 本文是整个 flash_attn 算子的**数学地基**。它只讲“为什么 FA 是对的、为什么 FA 快”，
 > 不碰任何 CUDA 代码。代码怎么落地见 `01_cuda_core_scaffold.md`（fp32 教学版）与
-> `02_tensor_core_tinyfa.md`（张量核性能版）。
+> `02_tensor_core_hopper.md`（H20 Hopper 张量核性能版）。
 >
 > 材料来源：`FA 细节.md`（Online-Softmax 四步推导 + 具体序列推演 + FA1/FA2 伪代码 + 微型 IO 推演）。
 
@@ -202,5 +202,5 @@ Q 外循环，`O_block` 锚定 SRAM。Q 读一次(16 B) + K/V 被 2 个 Q 块各
 ## 7. 接下来
 
 - 这套递推怎么用 fp32 CUDA-core 一行行写出来（先单 Query 版 `fa_cc_01`，再 FA2 分块版 `fa_cc_02`）→ **`01_cuda_core_scaffold.md`**
-- 怎么把同样的算法搬到 Tensor Core（mma.sync / ldmatrix / cp.async，~94–96% Dao FA2）→ **`02_tensor_core_tinyfa.md`**
+- 怎么把同样的算法搬到 Tensor Core（H20 Hopper 原生异步路径：WGMMA + TMA，手写内核冲到 148T 张量峰的 ~83%）→ **`02_tensor_core_hopper.md`**
 - FA 到底“新”在哪：它 = 两个 GEMM + online softmax **融合**，几乎没有全新原语 → **`03_synthesis_gemm_softmax_fa.md`**

@@ -1,0 +1,56 @@
+# GEMM ground-truth on NVIDIA H20 (sm_90a, SM clock locked 1980 MHz, CUDA 12.8)
+# generated 2026-07-06T09:11Z  best-of(warmup2/repeat10)
+
+== VERIFY (correctness) ==
+-- FP32 cuda_core vs cuBLAS @2048 (allclose 1e-2) --
+max_abs_err = 1.907349e-04
+max_abs_err = 1.907349e-04
+max_abs_err = 1.907349e-04
+max_abs_err = 1.907349e-04
+max_abs_err = 1.907349e-04
+max_abs_err = 1.907349e-04
+max_abs_err = 1.907349e-04
+max_abs_err = 1.907349e-04
+max_abs_err = 1.907349e-04
+-- BF16 cuda_core vs cuBLAS BF16 @2048 --
+max_abs_err = 2.517700e-04
+max_abs_err = 2.517700e-04
+max_abs_err = 2.517700e-04
+max_abs_err = 2.517700e-04
+max_abs_err = 2.517700e-04
+-- tensor_core vs cuBLAS/CPU @2048 --
+[tc_01 WMMA_naive] VERIFY max_abs=0.000e+00 bad=0/4194304  PASS
+[tc_02 WMMA_smem] VERIFY max_abs=0.000e+00 bad=0/4194304  PASS
+[tc_03 WMMA_pipe] VERIFY max_abs=0.000e+00 bad=0/4194304  PASS
+[tc_04 WGMMA] VERIFY max_abs=0.000e+00 max_rel=0.000e+00 bad=0/4194304  PASS
+[tc_05 WGMMA_fp8] VERIFY(512^3, vs CPU double) max_abs=2.927e-02 bad=0/262144  PASS
+[tc_06 MMA_pipe] VERIFY max_abs=0.000e+00 max_rel=0.000e+00 bad=0/4194304  PASS
+
+== BENCH @4096³ (SM 1980MHz) ==
+-- FP32 cuda_core (peak FP32 ~ SM*128*2*1.98GHz) --
+naive_kernel: M=4096 N=4096 K=4096, time=40.9927 ms, GFLOPS=3352.76
+smem_kernel: M=4096 N=4096 K=4096, time=27.2578 ms, GFLOPS=5042.19
+blocktiling_kernel: M=4096 N=4096 K=4096, time=15.5721 ms, GFLOPS=8825.99
+Dblocktiling_kernel: M=4096 N=4096 K=4096, time=9.4859 ms, GFLOPS=14488.73
+vectorized_kernel: M=4096 N=4096 K=4096, time=6.5248 ms, GFLOPS=21064.09
+warptile_kernel: M=4096 N=4096 K=4096, time=11.5474 ms, GFLOPS=11902.11
+warptile_vec_kernel: M=4096 N=4096 K=4096, time=6.1816 ms, GFLOPS=22233.53
+bank_conflict_kernel: M=4096 N=4096 K=4096, time=6.8972 ms, GFLOPS=19926.66
+double_buffer_kernel: M=4096 N=4096 K=4096, time=5.9187 ms, GFLOPS=23221.12
+-- FP32 cuBLAS SGEMM ref (id 0) --
+cublas_ref: M=4096 N=4096 K=4096, time=4.9016 ms, GFLOPS=28039.59
+-- BF16 cuda_core (util vs 148T) --
+naive                  M=4096 N=4096 K=4096  time=45.4159 ms  GFLOPS=3026.23  util(vs148T)=2.0%
+smem                   M=4096 N=4096 K=4096  time=27.0610 ms  GFLOPS=5078.86  util(vs148T)=3.4%
+2Dblocktiling          M=4096 N=4096 K=4096  time=9.2894 ms  GFLOPS=14795.26  util(vs148T)=10.0%
+vectorized             M=4096 N=4096 K=4096  time=6.2910 ms  GFLOPS=21846.93  util(vs148T)=14.8%
+warptile_vec           M=4096 N=4096 K=4096  time=6.0326 ms  GFLOPS=22782.81  util(vs148T)=15.4%
+-- BF16 cuBLAS ref (id 0) --
+cublas_bf16            M=4096 N=4096 K=4096  time=1.0254 ms  GFLOPS=134032.60  util(vs148T)=90.6%
+-- tensor_core (tc_04=cuBLAS BF16, tc_05=FP8 WGMMA) --
+[tc_01 WMMA_naive] M=4096 N=4096 K=4096  time=8.1104 ms  GFLOPS=16945.96  util(vs148T)=11.4%
+[tc_02 WMMA_smem] M=4096 N=4096 K=4096  time=4.5635 ms  GFLOPS=30116.86  util(vs148T)=20.3%
+[tc_03 WMMA_pipe] M=4096 N=4096 K=4096  time=3.5553 ms  GFLOPS=38657.40  util(vs148T)=26.1%
+[tc_04 cuBLAS BF16 fair] M=4096 N=4096 K=4096  time=1.0273 ms  GFLOPS=133789.17  util(vs148T)=90.4%
+[tc_05 WGMMA_fp8] M=4096 N=4096 K=4096  time=0.6080 ms  GFLOPS=226049.12  util(vs296T)=76.4%  util(vs148T)=152.7%
+[tc_06 MMA_pipe] M=4096 N=4096 K=4096  time=1.8243 ms  GFLOPS=75337.81  TFLOPS=75.34

@@ -20,6 +20,6 @@ prof gemm_cc_10_doublebuffer  "$ROOT/gemm/baselines/cuda_core"    "$ROOT/gemm/bu
 prof gemm_tc_06_mma_pipe      "$ROOT/gemm/baselines/tensor_core"  "$ROOT/gemm/build/tensor_core/bench" 6 4096 4096 4096
 prof softmax_sc_02_block      "$ROOT/softmax/baselines/cuda_core" "$ROOT/softmax/build/cuda_core/bench" 2 8192 8192
 prof softmax_sc_05_online     "$ROOT/softmax/baselines/cuda_core" "$ROOT/softmax/build/cuda_core/bench" 5 8192 8192
-prof fa_tc_mma_fp16           "$ROOT/flash_attn/baselines/tensor_core" "$ROOT/flash_attn/build/tensor_core/bench" fp16 2 32 4096 128 0
+prof fa_tc_hopper_wgmma       "$ROOT/flash_attn/baselines/tensor_core" "$ROOT/flash_attn/build/tensor_core/bench" bf16 2 32 4096 128 0
 prof fa_cc_02_tiled           "$ROOT/flash_attn/baselines/cuda_core"   "$ROOT/flash_attn/build/cuda_core/bench" 2 2 16 2048 64 0
 echo "ncu done -> reports under */baselines/, binaries in $OUT"

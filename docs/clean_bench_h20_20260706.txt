@@ -1,0 +1,33 @@
+== bench (performance @ locked clock) ==
+### GEMM FP32 cuda_core @4096
+naive_kernel: M=4096 N=4096 K=4096, time=40.9943 ms, GFLOPS=3352.63
+smem_kernel: M=4096 N=4096 K=4096, time=27.2602 ms, GFLOPS=5041.74
+blocktiling_kernel: M=4096 N=4096 K=4096, time=15.5774 ms, GFLOPS=8822.95
+Dblocktiling_kernel: M=4096 N=4096 K=4096, time=9.5023 ms, GFLOPS=14463.75
+vectorized_kernel: M=4096 N=4096 K=4096, time=6.5325 ms, GFLOPS=21039.39
+warptile_kernel: M=4096 N=4096 K=4096, time=11.5548 ms, GFLOPS=11894.58
+warptile_vec_kernel: M=4096 N=4096 K=4096, time=6.1854 ms, GFLOPS=22220.04
+bank_conflict_kernel: M=4096 N=4096 K=4096, time=6.9001 ms, GFLOPS=19918.54
+double_buffer_kernel: M=4096 N=4096 K=4096, time=5.9192 ms, GFLOPS=23219.01
+### GEMM tensor_core (WMMA→WGMMA→FP8) @4096
+[tc_01 WMMA_naive] M=4096 N=4096 K=4096  time=8.1104 ms  GFLOPS=16946.10  util(vs148T)=11.5%
+[tc_02 WMMA_smem] M=4096 N=4096 K=4096  time=4.5625 ms  GFLOPS=30123.53  util(vs148T)=20.4%
+[tc_03 WMMA_pipe] M=4096 N=4096 K=4096  time=3.5551 ms  GFLOPS=38659.41  util(vs148T)=26.1%
+[tc_04 WGMMA] M=4096 N=4096 K=4096  time=1.1392 ms  GFLOPS=120646.50  util(vs148T)=81.5%
+[tc_04 cuBLAS BF16 fair] M=4096 N=4096 K=4096  time=1.0272 ms  GFLOPS=133802.31  util(vs148T)=90.4%
+[tc_05 WGMMA_fp8] M=4096 N=4096 K=4096  time=0.6081 ms  GFLOPS=226026.52  util(vs296T)=76.4%  util(vs148T)=152.7%
+[tc_06 MMA_pipe] M=4096 N=4096 K=4096  time=1.8244 ms  GFLOPS=75332.20  TFLOPS=75.33
+### softmax @8192x8192
+sc_01_naive          M=8192 N=8192  time=5.2199 ms  eff_BW=102.9 GB/s  (2.6% of 4000)
+sc_02_block_reduce   M=8192 N=8192  time=0.2154 ms  eff_BW=2492.6 GB/s  (62.3% of 4000)
+sc_03_warp_shuffle   M=8192 N=8192  time=0.3230 ms  eff_BW=1662.1 GB/s  (41.6% of 4000)
+sc_04_vectorized     M=8192 N=8192  time=0.1699 ms  eff_BW=3159.0 GB/s  (79.0% of 4000)
+sc_05_online         M=8192 N=8192  time=0.1744 ms  eff_BW=3078.0 GB/s  (77.0% of 4000)
+sc_06_resident       M=8192 N=8192  time=0.2085 ms  eff_BW=2575.3 GB/s  (64.4% of 4000)
+### FA tensor_core (Hopper WGMMA+TMA) B2 H32 S4096 D128
+fa_hopper fp16 B=2 H=32 S=4096 D=128 causal=0  time=4.6224 ms  118.93 TFLOPS  (vs148T 80.4%)
+fa_hopper bf16 B=2 H=32 S=4096 D=128 causal=0  time=4.6262 ms  118.84 TFLOPS  (vs148T 80.3%)
+fa_hopper bf16 B=2 H=32 S=4096 D=128 causal=1  time=2.4160 ms  113.78 TFLOPS  (vs148T 76.9%)
+### FA cuda_core scaffold B2 H16 S2048 D64
+fa_cc_01_stream  B=2 H=16 S=2048 D=64 causal=0  time=77.9659 ms  0.44 TFLOPS
+fa_cc_02_tiled   B=2 H=16 S=2048 D=64 causal=0  time=53.0909 ms  0.65 TFLOPS

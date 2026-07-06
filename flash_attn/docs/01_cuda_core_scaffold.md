@@ -12,15 +12,19 @@
 ## 定位：这两支内核是“算法正确性基线”，故意慢
 
 它们的唯一目的是**把 `00_principle.md` 的递推公式一比一翻译成可运行、可对拍的 CUDA**，
-让你在没有 CuTe / PTX / 张量核这些噪音的情况下，先把 FA2 的数据流看清楚：
+让你在没有 WGMMA / TMA / PTX 这些噪音的情况下，先把 FA2 的数据流看清楚：
 
-- **纯 fp32 FMA**，一个 `q[d]*k[d]` 一个 `s`，没有 `mma.sync`、没有 fragment；
+- **纯 fp32 FMA**，一个 `q[d]*k[d]` 一个 `s`，没有 `WGMMA`、没有 fragment；
 - 累加器、`(m, l)` 全是**普通寄存器标量**，online 重标定就是几行 `__expf`；
 - `fa_cc_01` 甚至是**完全非合并访存**（一个线程走完一整行 K/V）——慢是刻意的。
 
-它们跑得慢，但它们是 `02_tensor_core_tinyfa.md` 里那支高性能内核的**语义参照物**：
+它们跑得慢，但它们是 `02_tensor_core_hopper.md` 里那支手写 Hopper 高性能内核的**语义参照物**：
 张量核版做的每一步（online 重标定、延迟归一化、Q 外 / KV 内），都能在这里找到标量对应。
 数据布局统一为 `[B, S, H, D]` 行主序，索引宏 `idx4` 见 `fa_common.h`。
+
+> **本机 H20（sm_90a）实测**：`fa_cc_01` ≈ **0.44 TFLOPS**、`fa_cc_02` ≈ **0.65 TFLOPS**（B2 H16 S2048 D64），
+> 而同机手写 Hopper WGMMA+TMA 内核（`fa_hopper.cuh`）到 **122 TFLOPS**——相差百倍以上。差距不在算法（三者跑同一个
+> FLOP 模型、同一套 online-softmax 递推），而在执行引擎：CUDA-core 标量 FMA vs. 张量核。这正是这两支"故意慢"内核的意义——只负责把算法讲对。
 
 ---
 
@@ -137,7 +141,7 @@ for (int j0 = 0; j0 <= loopEnd; j0 += kBc) {
 1. **访存合并**：`K/V` 由 block 内 32 线程**协作、跨步搬运**进 smem（`idx += blockDim.x` 保证连续地址落到连续线程），cache line 用满。
 2. **KV 复用**：一个 K/V 块搬进 smem 后，被 tile 内 32 个 query 行**共享**，不再 per-query 重读——干掉了 `fa_cc_01` 的 160 B 缺陷。
 
-`loopEnd` 是 causal 下的块级剪枝：整个 Q-tile 里下标最大的行是 `i0+kBr-1`，它之后的 K 块谁都用不到，直接不搬。（这在 `02` 的张量核版里升级为“masked / unmasked 分段”。）
+`loopEnd` 是 causal 下的块级剪枝：整个 Q-tile 里下标最大的行是 `i0+kBr-1`，它之后的 K 块谁都用不到，直接不搬。（这与 `02` 的 Hopper 张量核版同构：causal 时把内层的 `kv_last` 卡在本 tile 最后一行需要的 K 块，再对对角线上的尾块逐元素补 `-INF` 掩码。）
 
 ### 逐 key 的 online 更新（与 `fa_cc_01` 完全同构）
 ```cuda
@@ -187,6 +191,7 @@ KV 全扫完后一次性归一化、一次性写 HBM——FA2 三大区别里的
 
 ## 4. 下一步
 
-`02_tensor_core_tinyfa.md`：把 `fa_cc_02` 里的两处 `for d: s += q*k` / `acc += p*v` 换成
-`mma.sync m16n8k16` 两个 GEMM，把 smem 搬运换成 `cp.async` + `ldmatrix` + swizzle，
-把标量 `(m, l)` 递推换成 fragment 级 warp-4 归约——算法不变，只换执行引擎，冲到 ~94–96% Dao FA2。
+`02_tensor_core_hopper.md`：把 `fa_cc_02` 里的两处 `for d: s += q*k` / `acc += p*v` 换成
+`WGMMA m64n64k16`（warpgroup 异步张量指令）两个 GEMM，把 block 协作搬 smem 换成 `TMA`（`cp.async.bulk.tensor`）+ 128B swizzle，
+把标量 `(m, l)` 递推换成骑在 WGMMA 累加器布局上的 warp-4 shuffle 归约——算法不变，只换执行引擎，
+在 H20（sm_90a）上冲到 **122 TFLOPS（148T 张量峰的 82.8%）**。

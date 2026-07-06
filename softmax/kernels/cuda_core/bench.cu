@@ -1,10 +1,15 @@
 // softmax bench — cudaEvent timing + effective HBM bandwidth (softmax is memory
 // bound). Ideal traffic = read x + write y = 2*M*N*4 bytes; GB/s = ideal/time.
-// Fewer passes / better coalescing -> higher effective GB/s. A800 HBM ~2039 GB/s.
+// Fewer passes / better coalescing -> higher effective GB/s. H20 HBM3 ~4000 GB/s.
+// Peak-BW divisor defaults to H20 (4000) but is overridable via env PEAK_BW_GBS,
+// so the same binary reports honest %-of-peak on any card (single source: gpu_specs.py).
 //   usage: bench <id> [M N]   (default 8192 8192)
 #include "softmax.h"
+#include <cstdlib>
 
 int main(int argc, char** argv) {
+  const char* pk = getenv("PEAK_BW_GBS");
+  double peak_bw = pk ? atof(pk) : 4000.0;   // H20 HBM3 default
   if (argc < 2) { softmax_print_registry(); return 0; }
   int id = atoi(argv[1]);
   int M = argc > 2 ? atoi(argv[2]) : 8192;
@@ -32,8 +37,8 @@ int main(int argc, char** argv) {
 
   double ideal_bytes = 2.0 * (double)n * sizeof(float);
   double gbps = ideal_bytes / (ms * 1e-3) / 1e9;
-  printf("%-20s M=%d N=%d  time=%.4f ms  eff_BW=%.1f GB/s  (%.1f%% of 2039)\n",
-         c->name, M, N, ms, gbps, gbps / 2039.0 * 100.0);
+  printf("%-20s M=%d N=%d  time=%.4f ms  eff_BW=%.1f GB/s  (%.1f%% of %.0f)\n",
+         c->name, M, N, ms, gbps, gbps / peak_bw * 100.0, peak_bw);
   cudaFree(dx); cudaFree(dy);
   return 0;
 }
