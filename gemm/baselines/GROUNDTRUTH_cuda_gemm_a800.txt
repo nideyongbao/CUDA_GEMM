@@ -1,0 +1,20 @@
+# CUDA_GEMM ground-truth @ A800 sm_80, locked 1410MHz, 4096^3  (Mon Jul  6 04:51:26 AM UTC 2026)
+## FP32 cuda_core (id: name)
+cublas_ref: M=4096 N=4096 K=4096, time=8.7606 ms, GFLOPS=15688.26
+naive_kernel: M=4096 N=4096 K=4096, time=46.8225 ms, GFLOPS=2935.32
+smem_kernel: M=4096 N=4096 K=4096, time=33.1734 ms, GFLOPS=4143.05
+blocktiling_kernel: M=4096 N=4096 K=4096, time=13.3578 ms, GFLOPS=10289.06
+Dblocktiling_kernel: M=4096 N=4096 K=4096, time=11.9413 ms, GFLOPS=11509.57
+vectorized_kernel: M=4096 N=4096 K=4096, time=9.8252 ms, GFLOPS=13988.44
+warptile_kernel: M=4096 N=4096 K=4096, time=13.4231 ms, GFLOPS=10238.98
+warptile_vec_kernel: M=4096 N=4096 K=4096, time=7.9156 ms, GFLOPS=17363.00
+bank_conflict_kernel: M=4096 N=4096 K=4096, time=8.2708 ms, GFLOPS=16617.27
+double_buffer_kernel: M=4096 N=4096 K=4096, time=9.9383 ms, GFLOPS=13829.18
+## BF16 cuda_core (proves dtype-only is useless)
+cublas_bf16            M=4096 N=4096 K=4096  time=0.5243 ms  GFLOPS=262144.00  util(vs148T)=177.1%
+warptile_vec           M=4096 N=4096 K=4096  time=9.7479 ms  GFLOPS=14099.39  util(vs148T)=9.5%
+## Tensor core (id: 1 wmma_naive,2 wmma_smem,3 wmma_pipe,6 mma_pipe)
+[tc_01 WMMA_naive] M=4096 N=4096 K=4096  time=8.8269 ms  GFLOPS=15570.50  util(vs148T)=10.5%
+[tc_02 WMMA_smem] M=4096 N=4096 K=4096  time=5.8764 ms  GFLOPS=23388.38  util(vs148T)=15.8%
+[tc_03 WMMA_pipe] M=4096 N=4096 K=4096  time=3.9721 ms  GFLOPS=34600.67  util(vs148T)=23.4%
+[tc_06 MMA_pipe] M=4096 N=4096 K=4096  time=1.2434 ms  GFLOPS=110535.50  TFLOPS=110.54
