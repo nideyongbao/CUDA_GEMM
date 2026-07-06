@@ -171,13 +171,18 @@ flash_attn/build/cuda_core/verify 2 2 4 256 64 0          # fa_cc_02 tiled 对�
 
 **② tensor_core（`tensor_core/bench <id>`）** — 张量核 matmul 阶梯
 
-| 级 | id | 用例 | TFLOPS | %峰值(312T) | %cuBLAS |
-| --- | ---: | --- | ---: | ---: | ---: |
-| — | — | **cuBLAS BF16（基线/上限，`bench_bf16 0`）** | **264.7** | **84.8%** | 100% |
-| ① | 1 | tc_01 wmma_naive | 17.8 | 5.7% | 6.7% |
-| ② | 2 | tc_02 wmma_smem | 27.1 | 8.7% | 10.2% |
-| ③ | 3 | tc_03 wmma_pipe (cp.async) | 43.1 | 13.8% | 16.3% |
-| ⑥ | 6 | **tc_06 mma_pipe** (mma.sync+ldmatrix+cp.async) | **150.3** | **48.2%** | **56.8%** |
+| 级 | id | 用例 | TFLOPS | %峰值(312T) | %cuBLAS | A800 可用? |
+| --- | ---: | --- | ---: | ---: | ---: | :-: |
+| — | — | **cuBLAS BF16（基线/上限，`bench_bf16 0`）** | **264.7** | **84.8%** | 100% | ✅ |
+| ① | 1 | tc_01 wmma_naive | 17.8 | 5.7% | 6.7% | ✅ |
+| ② | 2 | tc_02 wmma_smem | 27.1 | 8.7% | 10.2% | ✅ |
+| ③ | 3 | tc_03 wmma_pipe (cp.async) | 43.1 | 13.8% | 16.3% | ✅ |
+| ④ | 4 | tc_04 wgmma+TMA+warp-spec | —（H20: ~80% 峰） | — | — | ❌ Hopper 独占 |
+| ⑤ | 5 | tc_05 wgmma FP8 (e4m3) | —（H20: 224T/296T峰） | — | — | ❌ Hopper 独占 |
+| ⑥ | 6 | **tc_06 mma_pipe** (mma.sync+ldmatrix+cp.async) | **150.3** | **48.2%** | **56.8%** | ✅ |
+
+> **④⑤ 去哪了？——它们是 Hopper(sm_90) 独占，A800 物理上跑不了，故不编译**：`tc_04`=WGMMA(warpgroup 异步张量指令)+TMA+warp specialization，`tc_05`=在其上换 FP8(e4m3)。二者依赖 **WGMMA / TMA / FP8 张量路径**，而 A800 是 Ampere(sm_80)，张量核只有 **warp 级 `mma.sync`**——无 WGMMA、无 TMA、无 FP8。故 `gemm/Makefile` 用 `TC_HOPPER=0 -DNO_HOPPER` **只编 tc_01/02/03/06**；本机跑 `tensor_core/bench 4` 会打印「本架构不可用的 id=4」。表中 ④⑤ 的括号数字是 CUDA_GEMM 在 **H20(Hopper)** 上的参考值（见 `gemm/docs/a800/` 与原 CUDA_GEMM `docs/h20/11–12`），**放这里只为解释 id 编号 ①②③④⑤⑥ 的连续性，不是 A800 实测**。
+> **为什么 A800 的顶级是 ⑥ 而非 ④**：`tc_06`(mma.sync+ldmatrix+cp.async) 是 **sm_80+ 通用的 Ampere 原生**张量核级，在 CUDA_GEMM 的跨架构编号里排在 Hopper 的 ④⑤ 之后、占 ⑥ 位；对 A800 它就是可读 CUDA/CuTe 的**天花板级**（150.3T = 48.2%峰）。要再往上（WGMMA/TMA/FP8）必须换 Hopper 卡——那属于 FA3/GEMM-Hopper 的范畴，不在本 sm_80 教程内。
 
 > WMMA 三级（`load_matrix_sync`/`mma_sync`）被 L1/TEX 喂数打满，在 A800 止步 ~14% 峰；**tc_06** 换成 Ampere 原生 `mma.sync.m16n8k16` + `ldmatrix`（消 bank 冲突）+ 多级 `cp.async`，把手写拉到 **150.3 TFLOPS = 312T 的 48.2%**（= WMMA `tc_03` 的 **3.49×**）。**tc_06 就是 FA tensor_core 复用的那把张量核基元。**
 > ✅ **精确复现**：本机干净卡（GPU 空闲、锁频 1410MHz）实测 tc_06 = **150.3 TFLOPS = 48.2% 峰 = 3.49× tc_03**，与 CUDA_GEMM 的 A800 归档文档（`gemm/docs/a800/`：「锁频 4096³ 实测 48.2%（150.3T/312T）= 3.49× tc_03」）**逐项吻合**。ncu：`mma_pipe_kernel` Compute(SM) 48.7% / L1-TEX(Memory) 76.5% / 占用率 24.3% / 123 寄存器每线程（寄存器压力墙，即 A800 文档所述"可读 CUDA C++ 天花板 ~48%"）。
