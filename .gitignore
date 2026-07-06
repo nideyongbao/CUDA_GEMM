@@ -1,0 +1,7 @@
+build/
+result/
+*.o
+*.ncu-rep
+*.nsys-rep
+__pycache__/
+third_party/cutlass
