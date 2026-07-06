@@ -171,12 +171,13 @@ flash_attn/build/cuda_core/verify 2 2 4 256 64 0          # fa_cc_02 tiled 对�
 
 **② tensor_core（`tensor_core/bench <id>`）** — 张量核 matmul 阶梯
 
-| 级 | id | 用例 | GFLOPS | TFLOPS | %峰值(312T) |
+| 级 | id | 用例 | TFLOPS | %峰值(312T) | %cuBLAS |
 | --- | ---: | --- | ---: | ---: | ---: |
-| ① | 1 | tc_01 wmma_naive | 17807 | 17.8 | 5.7% |
-| ② | 2 | tc_02 wmma_smem | 27108 | 27.1 | 8.7% |
-| ③ | 3 | tc_03 wmma_pipe (cp.async) | 43093 | 43.1 | 13.8% |
-| ⑥ | 6 | **tc_06 mma_pipe** (mma.sync+ldmatrix+cp.async) | **150333** | **150.3** | **48.2%** |
+| — | — | **cuBLAS BF16（基线/上限，`bench_bf16 0`）** | **264.7** | **84.8%** | 100% |
+| ① | 1 | tc_01 wmma_naive | 17.8 | 5.7% | 6.7% |
+| ② | 2 | tc_02 wmma_smem | 27.1 | 8.7% | 10.2% |
+| ③ | 3 | tc_03 wmma_pipe (cp.async) | 43.1 | 13.8% | 16.3% |
+| ⑥ | 6 | **tc_06 mma_pipe** (mma.sync+ldmatrix+cp.async) | **150.3** | **48.2%** | **56.8%** |
 
 > WMMA 三级（`load_matrix_sync`/`mma_sync`）被 L1/TEX 喂数打满，在 A800 止步 ~14% 峰；**tc_06** 换成 Ampere 原生 `mma.sync.m16n8k16` + `ldmatrix`（消 bank 冲突）+ 多级 `cp.async`，把手写拉到 **150.3 TFLOPS = 312T 的 48.2%**（= WMMA `tc_03` 的 **3.49×**）。**tc_06 就是 FA tensor_core 复用的那把张量核基元。**
 > ✅ **精确复现**：本机干净卡（GPU 空闲、锁频 1410MHz）实测 tc_06 = **150.3 TFLOPS = 48.2% 峰 = 3.49× tc_03**，与 CUDA_GEMM 的 A800 归档文档（`gemm/docs/a800/`：「锁频 4096³ 实测 48.2%（150.3T/312T）= 3.49× tc_03」）**逐项吻合**。ncu：`mma_pipe_kernel` Compute(SM) 48.7% / L1-TEX(Memory) 76.5% / 占用率 24.3% / 123 寄存器每线程（寄存器压力墙，即 A800 文档所述"可读 CUDA C++ 天花板 ~48%"）。
@@ -186,15 +187,17 @@ flash_attn/build/cuda_core/verify 2 2 4 256 64 0          # fa_cc_02 tiled 对�
 
 访存受限归约；口径 = 有效 HBM 带宽（理想流量 2·M·N·4 字节 ÷ 实测时间），分母 A800 HBM 峰值 2039 GB/s。
 
-| id | kernel | 单一 delta | 时间(ms) | 有效带宽(GB/s) | %屋顶(2039) |
-| ---: | --- | --- | ---: | ---: | ---: |
-| 1 | sc_01 naive | 一线程一行（非合并） | 6.970 | 77.0 | 3.8% |
-| 2 | sc_02 block_reduce | 一块一行 + smem 树归约（合并） | 0.591 | 908.2 | 44.5% |
-| 3 | sc_03 warp_shuffle | 寄存器 shuffle 归约（去 smem/同步） | 0.644 | 834.2 | 40.9% |
-| 4 | sc_04 vectorized | float4 128-bit 访存 | 0.519 | 1034.2 | 50.7% |
-| 5 | **sc_05 online** | **max/sum 融合成一趟流式（3 读→2 读）** | **0.443** | **1211.5** | **59.4%** |
+| id | kernel | 单一 delta | 时间(ms) | 有效带宽(GB/s) | %屋顶(2039) | %库基线 |
+| ---: | --- | --- | ---: | ---: | ---: | ---: |
+| — | **PyTorch `torch.softmax`（库基线）** | cuDNN/torch 原生 | **0.330** | **1628.2** | **79.9%** | 100% |
+| 1 | sc_01 naive | 一线程一行（非合并） | 6.970 | 77.0 | 3.8% | 4.7% |
+| 2 | sc_02 block_reduce | 一块一行 + smem 树归约（合并） | 0.591 | 908.2 | 44.5% | 55.8% |
+| 3 | sc_03 warp_shuffle | 寄存器 shuffle 归约（去 smem/同步） | 0.644 | 834.2 | 40.9% | 51.2% |
+| 4 | sc_04 vectorized | float4 128-bit 访存 | 0.519 | 1034.2 | 50.7% | 63.5% |
+| 5 | **sc_05 online** | **max/sum 融合成一趟流式（3 读→2 读）** | **0.443** | **1211.5** | **59.4%** | **74.4%** |
 
-> `sc_05 online` = **最快**（1211 GB/s，比 `sc_04` 再 +17%）——正是"把 x 的三趟读压成两趟"的访存节省。ncu：`sc05_online_kernel` DRAM 吞吐 **87.2% / 1.78 TB/s**、占用率 94.2%（访存屋顶线已接近打满）。**这一趟流式 (m,l) 递推就是 FA 内层复用的 online softmax。**
+> **基线说明**：cuBLAS 是 GEMM 库、**无 softmax 原语**，故 softmax 的"厂商库基线"取 **PyTorch `torch.softmax`**（底层走 cuDNN/torch 原生），同形状(8192²,fp32)、同口径(有效带宽)实测 = **1628 GB/s（79.9% 屋顶）**。为遵循"教程不引入过度依赖"，仅拿这一个数字对比、不进构建。
+> `sc_05 online` = 手写**最快**（1211 GB/s，比 `sc_04` +17%，达库基线的 **74%**）——正是"把 x 的三趟读压成两趟"的访存节省。ncu：`sc05_online_kernel` DRAM 吞吐 **87.2% / 1.78 TB/s**、占用率 94.2%。**这一趟流式 (m,l) 递推就是 FA 内层复用的 online softmax。** 手写与库基线的差距（74%）主要来自 PyTorch 的单趟 warp-per-row + 更激进的向量化调优，是留给读者的下一级练习。
 
 ### FlashAttention（`flash_attn/build/*/bench`，锁频 1410MHz）
 
@@ -207,6 +210,21 @@ flash_attn/build/cuda_core/verify 2 2 4 256 64 0          # fa_cc_02 tiled 对�
 | cuda_core 脚手架 | fa_cc_01 stream, 同上 | 74.84 | 0.46 | 每线程一 query |
 
 > **张量核 vs CUDA 核 = 206.7 / 0.94 ≈ 220×**——一句话钉死"注意力的两次 matmul 必须上张量核"。TinyFA 前向在 A800 达 **206–209 TFLOPS**，落在其 A100 自述 194–200T 的同一量级（A800 与 A100 张量核规格相同），**按构造复现**。ncu：`flashAttentionKernel` Compute(SM) **67.9%** / 占用率仅 **12.3%**——FA 靠 ILP+异步流水藏延迟、不靠高占用率（与 GEMM `tc_06` 占用 24% 同理）。
+
+**与 SDPA / FA2 基线对比（同配置 B8 H28 S4096 D128 前向，口径同为 4·B·H·S²·D，causal ÷2）**
+
+SDPA / FA2 依赖 torch 与 flash-attn 三方库，**本教程不引入这些依赖**；下表两条基线取自本机预采归档 `nvidia-gpu-baseline/archives/A800-SXM-torch210-cuda129`（FA2 = flash-attn **2.8.3**，SDPA = torch，FA3 该机不可用），仅拿数据对比。TinyFA 一列为本仓库 `flash_attn/build/tensor_core/bench` 同机实测。
+
+| backend | 非causal TFLOPS | causal TFLOPS | 来源 |
+| --- | ---: | ---: | --- |
+| **flash-attn v2 (2.8.3)** —— 参考上限 | **214.5** | **198.5** | 归档 |
+| torch SDPA（flash backend） | 204.6 | 181.6 | 归档 |
+| torch SDPA（cuDNN backend） | 188.8 | 179.1 | 归档 |
+| **TinyFA（本仓库 tensor_core，fp16）** | **202.9**（bf16 207.5） | **185.0** | 本机实测 |
+| torch SDPA（mem-efficient） | 112.0 | 106.6 | 归档 |
+| custom triton（教学版） | 93.2 | 82.2 | 归档 |
+
+> **定位**：TinyFA = FA2 的 **94.6%**（非causal 202.9/214.5）/ **93.2%**（causal 185.0/198.5），与 torch SDPA-flash **基本持平**（非causal 99%、causal 反超 2%），是 mem-efficient 的 1.8× 、教学版 triton 的 **~2.2×**。这恰好印证 TinyFA "94–96% Dao FA2" 的定位——**一个干净的、仅前向的 FA2**。（两种 harness 计时口径略异，量级对比可信到个位百分点。）
 
 > ✅ **复现闭环已完成**：以上 GEMM / softmax / FA 全部数字为**本机干净 A800、锁频 1410MHz** 实测（快照见 `result/latest/`，ncu details 见各 `*/baselines/`）。GEMM 与 FA 用与 CUDA_GEMM / TinyFA **相同的 kernel**，数字按构造一致；tc_06=150.3T 更与 CUDA_GEMM 归档文档逐项吻合。
 

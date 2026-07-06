@@ -27,6 +27,12 @@
 **FA tensor_core (TinyFA)**：fp16 **206.7** / bf16 **208.9** / fp16-causal 177.3 TFLOPS（复现 TinyFA A100 194/200T 量级，A800≈A100）。ncu：`flashAttentionKernel` Compute 67.9% / 占用 12.3%（ILP 藏延迟）。
 **FA cuda_core 脚手架**：fa_cc_02 0.94 / fa_cc_01 0.46 TFLOPS → 张量核比 CUDA 核快 **~220×**，实证"注意力 matmul 必须上张量核"。
 
+## 厂商库 / 参考基线（补齐，均本机同机对比）
+
+- **GEMM tensor_core 上限 = cuBLAS BF16 264.7 TFLOPS（84.8% 峰）**（`gemm/build/cuda_core/bench_bf16 0 4096`）。手写 tc_06 150.3T = cuBLAS 的 **56.8%**。
+- **softmax 库基线 = PyTorch `torch.softmax` 1628 GB/s（79.9% 屋顶）**（cuBLAS 无 softmax 原语，故取 torch/cuDNN；8192² fp32 同口径）。手写 sc_05 online 1211 GB/s = 库基线的 **74%**。
+- **FA 库基线 = flash-attn v2(2.8.3) 与 torch SDPA**，取自归档 `nvidia-gpu-baseline/archives/A800-SXM-torch210-cuda129`（口径同为 4·B·H·S²·D，已核对一致）。同配置 B8 H28 S4096 D128 前向：TinyFA **202.9**（非causal）/ **185.0**（causal）= FA2(214.5/198.5) 的 **94.6% / 93.2%**，与 torch SDPA-flash(204.6/181.6) 基本持平，是教学版 triton 的 ~2.2×。明细见 `flash_attn/baselines/external_sdpa_fa2_a800.md`。教程本身**不引入 torch/flash-attn 依赖**，仅拿这两组数据对比。
+
 ## §GEMM — 已复现（构造证明 + 实测地面真值）
 
 **构造证明**：`gemm/kernels/**` 与 `gemm/include/**` 是 CUDA_GEMM 对应文件的**逐字节拷贝**（`diff` 为空），仅 `Makefile` 默认值改为 A800（`ARCH=sm_80 TC_HOPPER=0`）。相同 kernel + 相同 A800 ⇒ **同一组性能数字**。
