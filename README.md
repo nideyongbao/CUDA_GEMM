@@ -194,10 +194,12 @@ flash_attn/build/cuda_core/verify 2 2 4 256 64 0          # fa_cc_02 tiled 对�
 | 2 | sc_02 block_reduce | 一块一行 + smem 树归约（合并） | 0.591 | 908.2 | 44.5% | 55.8% |
 | 3 | sc_03 warp_shuffle | 寄存器 shuffle 归约（去 smem/同步） | 0.644 | 834.2 | 40.9% | 51.2% |
 | 4 | sc_04 vectorized | float4 128-bit 访存 | 0.519 | 1034.2 | 50.7% | 63.5% |
-| 5 | **sc_05 online** | **max/sum 融合成一趟流式（3 读→2 读）** | **0.443** | **1211.5** | **59.4%** | **74.4%** |
+| 5 | sc_05 online | max/sum 融合成一趟流式（4→3 traffic） | 0.443 | 1211.5 | 59.4% | 74.4% |
+| 6 | **sc_06 resident** | **整行缓存进寄存器，单次 DRAM 读（3→2 traffic）** | **0.314** | **1708.4** | **83.8%** | **105%** |
 
-> **基线说明**：cuBLAS 是 GEMM 库、**无 softmax 原语**，故 softmax 的"厂商库基线"取 **PyTorch `torch.softmax`**（底层走 cuDNN/torch 原生），同形状(8192²,fp32)、同口径(有效带宽)实测 = **1628 GB/s（79.9% 屋顶）**。为遵循"教程不引入过度依赖"，仅拿这一个数字对比、不进构建。
-> `sc_05 online` = 手写**最快**（1211 GB/s，比 `sc_04` +17%，达库基线的 **74%**）——正是"把 x 的三趟读压成两趟"的访存节省。ncu：`sc05_online_kernel` DRAM 吞吐 **87.2% / 1.78 TB/s**、占用率 94.2%。**这一趟流式 (m,l) 递推就是 FA 内层复用的 online softmax。** 手写与库基线的差距（74%）主要来自 PyTorch 的单趟 warp-per-row + 更激进的向量化调优，是留给读者的下一级练习。
+> **基线说明**：cuBLAS 是 GEMM 库、**无 softmax 原语**，故 softmax 的"厂商库基线"取 **PyTorch `torch.softmax`**（底层走 cuDNN/torch 原生），同形状(8192²,fp32)、同口径实测 = **1628 GB/s（79.9% 屋顶）**。仅拿数字对比、不进构建。
+> **`sc_06 resident` 手写反超库基线**（1708 GB/s，105% of torch，83.8% 屋顶）：softmax 受 DRAM 带宽限制（ncu：sc_05 已打到 DRAM 87%），故提速的唯一路是**减少 DRAM 访问遍数**。`sc_05` 把 max/sum 两趟统计融合成一趟（4·MN→3·MN）；`sc_06` 更进一步：第一次读 x 时**整行缓存进寄存器**，之后 max/sum/写全在片上，x **只读一次**（3·MN→**2·MN = 屋顶理想**）。ncu：`sc06_resident_kernel` DRAM **85.2% / 1.74 TB/s**、96 寄存器/线程。
+> ⚠️ **口径提醒（dispatch-by-N）**：`sc_06`（block-per-row, 256 线程）只在**大 N** 占优；实测 N=2048 时 sc_06 反而慢于 sc_05（1106 vs 1618 GB/s）——行太短时整块的归约/同步开销盖过收益。生产库（cuDNN/PyTorch/OneFlow）正是按 N **分派**：小 N 用 warp-per-row，中 N 用本 register-resident，超大 N（放不下片上）退回 online 流式。详见 [`softmax/docs/04_beyond_online.md`](softmax/docs/04_beyond_online.md)。
 
 ### FlashAttention（`flash_attn/build/*/bench`，锁频 1410MHz）
 

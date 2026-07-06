@@ -31,6 +31,7 @@ void softmax_block_reduce(const float* x, float* y, int M, int N, cudaStream_t);
 void softmax_warp_shuffle(const float* x, float* y, int M, int N, cudaStream_t); // sc_03
 void softmax_vectorized  (const float* x, float* y, int M, int N, cudaStream_t); // sc_04
 void softmax_online      (const float* x, float* y, int M, int N, cudaStream_t); // sc_05
+void softmax_resident    (const float* x, float* y, int M, int N, cudaStream_t); // sc_06
 
 struct SoftmaxCase { int id; const char* name; SoftmaxFn fn; };
 
@@ -41,6 +42,7 @@ inline const std::vector<SoftmaxCase>& softmax_registry() {
       {3, "sc_03_warp_shuffle", softmax_warp_shuffle},
       {4, "sc_04_vectorized",   softmax_vectorized},
       {5, "sc_05_online",       softmax_online},
+      {6, "sc_06_resident",     softmax_resident},
   };
   return reg;
 }
