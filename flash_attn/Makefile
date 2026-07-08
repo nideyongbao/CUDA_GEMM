@@ -19,10 +19,20 @@ CC_OUT := $(BUILD)/cuda_core
 # ---- tensor_core (TinyFA vendored) ----
 TFA_KOBJS := $(TC_OUT)/tfa_fwd_fp16_sm80.o $(TC_OUT)/tfa_fwd_bf16_sm80.o
 
-.PHONY: all tc cc clean
-all: tc cc
+# from-scratch raw-CUDA tensor-core FA ladder (fa_tc_01..04); needs c++20 (class NTTP-free bools, but uses c++20 for constexpr)
+FATC_FLAGS := $(ARCH) -O3 -std=c++20 -use_fast_math --expt-relaxed-constexpr -diag-suppress 177 \
+              -I include -I kernels/tensor_core
+
+.PHONY: all tc cc fatc clean
+all: tc cc fatc
 tc: $(TC_OUT)/bench $(TC_OUT)/verify
 cc: $(CC_OUT)/bench $(CC_OUT)/verify
+fatc: $(TC_OUT)/fa_tc_bench $(TC_OUT)/fa_tc_verify
+
+$(TC_OUT)/fa_tc_bench: kernels/tensor_core/fa_tc_bench.cu kernels/tensor_core/fa_tc_ladder.cuh kernels/tensor_core/fa_tc.cuh kernels/tensor_core/fa_tc_ptx.cuh include/fa_common.h | $(TC_OUT)
+	$(NVCC) $< -o $@ $(FATC_FLAGS)
+$(TC_OUT)/fa_tc_verify: kernels/tensor_core/fa_tc_verify.cu kernels/tensor_core/fa_tc_ladder.cuh kernels/tensor_core/fa_tc.cuh kernels/tensor_core/fa_tc_ptx.cuh include/fa_common.h | $(TC_OUT)
+	$(NVCC) $< -o $@ $(FATC_FLAGS)
 
 $(TC_OUT) $(CC_OUT):
 	mkdir -p $@
