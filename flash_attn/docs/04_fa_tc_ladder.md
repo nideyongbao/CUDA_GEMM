@@ -1,4 +1,4 @@
-# FA tensor-core 增量阶梯：fa_tc_01 → fa_tc_05（from-scratch raw-CUDA）
+# FA tensor-core 增量阶梯：fa_tc_01 → fa_tc_06（from-scratch raw-CUDA） + fafs 实测参考
 
 补上 FA 算子缺的那条"增量 tensor-core 阶梯"——**手写 `mma.sync.m16n8k16` + `ldmatrix(.trans)` + `cp.async`** 的 FA2 前向，一 delta 一级，和 GEMM 的 `tc_01→tc_06` 对称。终点参照是 vendored 的 TinyFA（CuTe，204 TFLOPS）。本梯为**我们自己手写**（canonical Ampere 布局，参考 CUTLASS/TinyFA/lubits.ch `flash_attention_from_scratch`），逐级对 `fa_cpu_ref` 验证通过。
 
@@ -11,9 +11,12 @@
 | 3 | fa_tc_03_cpasync | + `cp.async` GMEM→SMEM | 134.9 | +29% | 63% | PASS |
 | 4 | fa_tc_04_exp2 | + `exp2f` + 折叠 log2e | 136.0 | +1% | 63% | PASS |
 | 5 | **fa_tc_05_occ** | **+ `__launch_bounds__` 抬占用率 12.5%→18.4%** | **146.3** | **+8%** | **68%** | PASS |
+| 6 | fa_tc_06_pipeline | + 双缓冲 K/V 流水（**反例:smem 翻倍→占用率↓,净亏**） | 137.7 | −6% | 64% | PASS |
+| — | fafs 峰值(Br=128,实测) | autotune 更大 tile | 159.9 | — | 75% | — |
 | — | TinyFA（CuTe 终态，参照） | 完整多级流水线+CuTe | 204.8 | — | 93% | PASS |
 
 寄存器：base 184 → fa_tc_05 168 regs / **0 spill**（D=128 靠**流式 operand 载入**——K/V 每 k16-tile 现载现用，全驻留会撑爆 RF）。所有 rung causal + 非causal、S≤1024 全 PASS（对拍 fp32 CPU 参考注意力）。
+> **`fa_tc_06` 是诚实的反例级**:朴素双缓冲把 smem 48→80KB → 占用率 3→2 block/SM,重叠收益盖不过占用率损失,**净亏 6%**——与 fafs 的 buffer 级只 +0.5% 一致(**双缓冲要配合 d_head 分块降寄存器才划算**)。像 GEMM 的 bank-conflict 反例级一样,教"不是每个优化都赢"。
 
 ## 头号一课：swizzle 的 +3× 为什么发生——SASS 与 ncu 两层缺一不可
 
@@ -44,26 +47,27 @@
 
 `flash_attention_from_scratch`（fafs）用 **16 级**打到官方 FA2 的 **99.2%**（A100）。三段：**①1-2 内存布局**（base→swizzle，15.8%→72.6%）**②3-7 流水线/重叠/autotune**（→80.3%）**③8-16 SASS 指令级微优化**（→99.2%，"16 Static GMEM Stride"=把行 stride 变编译期常量、折掉地址 IMAD）。
 
-**本梯 5 级 vs fafs 16 级的对照（%-of-FA2，本机 A800 FA2=214.5）**：
+**我们把 fafs 实际编译跑在了本机 A800 上**（见 `reference/`），据此对账——结论:**我们的手写阶梯与 fafs 的进阶逐级吻合**。
 
-| 本梯 | %FA2 | ≈ fafs | fafs %FA2 |
-| --- | ---: | --- | ---: |
-| fa_tc_01 base | 16% | 1 base | 15.8% ✅ 吻合 |
-| fa_tc_02 swizzle | 49% | 2 swizzle | 72.6% |
-| fa_tc_03 cpasync | 63% | 3 eager-load | 77.6% |
-| fa_tc_05 occ | **68%** | 7 autotune | 80.3% |
-| （未实现） | — | **4,5,8–16** | →99.2% |
+| 特性层（本机 A800，B2 H32 S4096） | fafs | 我们 fa_tc | 结论 |
+| --- | ---: | ---: | --- |
+| base（无 swizzle） | 34.9 | 33.3 | ✅ 吻合 |
+| swizzle | 139.6（async+swz） | 134.9（fa_tc_03 cpasync+swz） | ✅ 吻合（±3%）|
+| Br=64 进阶封顶 | 145.3 | **146.3（fa_tc_05）** | ✅ **吻合/略高** |
+| double-buffer | 145.3（+0.5%） | 137.7（fa_tc_06 净亏） | 都印证 buffer 在此配置**边际/无用** |
+| **autotune 峰值** | **159.9（Br=128）** | —（未实现 2-M-tile） | fafs +10% |
 
-**base 与 fafs 几乎完全吻合（16% vs 15.8%）——证明这是同一个正确起点、不是 bug；分歧全来自"缺后面的级"。**
+> **更正一个早先的误比**:曾说"fa_tc_02 swizzle 49% << fafs 72.6%"——那是拿我们的 **sync**-swizzle 比 fafs 的 **async**-swizzle。对齐 async 后（我们 fa_tc_03 vs fafs rung2）是 **134.9 vs 139.6，吻合**。**没有"神秘 gap":我们的 raw 梯在同配置封顶都在 ~145–146。**
 
-**ncu 诊断（fa_tc_04，未 occ 调优时）**：Achieved Occupancy **12.4%**（184 寄存器→2 block/SM）、Issued Warps/Sched **0.38**、Compute(SM) 39% / Memory 44%（**都没打满**）、Tensor pipe 空等 60% → **典型 latency-bound + 低占用率**。`fa_tc_05` 用一行 `__launch_bounds__` 把占用率抬到 18.4%、issue 0.47、Compute 48.9% → +8%，**验证了诊断**。
+**ncu 诊断（fa_tc_04）**:Occupancy **12.4%**（184 寄存器→2 block/SM）、Issued/Sched **0.38**、Compute 39%/Memory 44%（都没打满）→ latency-bound。`fa_tc_05` 一行 `__launch_bounds__` 抬占用率到 18.4% → +8%，验证诊断。
 
-**到 FA2(214)/TinyFA(200) 剩余的 32% 差距 = fafs 的 rung 4/5/8–16 我全未实现**：
-1. **真·多级流水线双缓冲**（rung 3-5）：K/V 双 smem buffer，prefetch tile j+1 与 compute tile j 重叠 → 藏 GMEM+ldmatrix 延迟（我现在是 `load→__syncthreads→compute` 全串行、零重叠）。
-2. **d_head 分块降寄存器**（rung 15）：把 O 累加器（这里 64 个 f32）切成 64-块 → 寄存器再降 → 占用率再升。
-3. **SASS 指令级微优化**（rung 8-16）：削 IMAD.MOV/LOP3/CS2R、encoded swizzle、static GMEM stride——HMMA 恒定、只削整数/开销指令。**这一层正好用我们的 `common/sass_compare.py` 复现其证据**。
+**到 fafs 峰值(160)/TinyFA(200)/FA2(214) 的差距 = 三层，已全部定位**（详见 `reference/fafs_a800_results.md`）:
+1. **Br=128**（autotune,+10%→160）:4warps×2-M-tile 更大 Q tile;fafs 靠它拿 A800 峰值。**8-warp×16-row 变体实测崩到 22T（MINBLK 与寄存器打架）——必须 2-M-tile 重构。**
+2. **CuTe 级 tiling/多级流水**（160→200 TinyFA）:超出可读手写 raw-CUDA 的性价比区。
+3. **官方 FA2 warp-specialization**（200→214）。
+> **"99.2% FA2" 是 A100 + fafs 自身 benchmark 配置**、对 A100 FA2(186) 算的;**在 A800 本配置下 fafs 自己也只到 75% FA2(160)**。所以"本地没复现 99.2%"**不是 bug**,而是机器/配置口径差异 + 我们止于 Br=64 可读阶梯。
 
-**能否直接借用 fafs 的 16 个 tc 示例？** 作**参考/续梯蓝本/SASS 证据**——强烈推荐；**直接 vendor 进 Makefile**——不建议：① 无 LICENSE；② build 绑死 torch/pybind + python codegen（非干净单 `.cu`）；③ 拖进 ~2750 行 mini-CuTe 抽象；④ rung 8-16 是针对其自身代码的微优化、非通用可移植 delta。故本仓库**手写自己的 raw 梯**（base 已吻合、swizzle/occ 已验证），把 fafs 当续梯参考、TinyFA 当 CuTe 终态。
+**能否直接借用 fafs 的 tc 示例?** ① 作**性能参考**——✅ 已做（编译跑在 A800,`reference/bench_fafs.py` 可复现全曲线;修的只是 `-lcuda` stub 路径 + torch lib 的 `LD_LIBRARY_PATH`,kernel 本身 0 spill 干净编译）;② **直接 vendor 进本仓库 Makefile**——不建议:无 LICENSE、build 绑死 torch/pybind+codegen、拖 ~2750 行 mini-CuTe。故:**手写自己的可读 raw 梯（已与 fafs 逐级对齐）,fafs 当实测性能参考,TinyFA 当 CuTe 终态。**
 
 ## 与 GEMM 阶梯的对称
 

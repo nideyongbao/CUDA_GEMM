@@ -217,12 +217,15 @@ flash_attn/build/cuda_core/verify 2 2 4 256 64 0          # fa_cc_02 tiled 对�
 | **tensor_core raw 阶梯** `fa_tc_02` +swizzle | 同上 | 5.24 | **104.9** | **消 bank 冲突 +3.1×** |
 | **tensor_core raw 阶梯** `fa_tc_03` +cp.async | 同上 | 4.08 | 134.9 | 异步载入 |
 | **tensor_core raw 阶梯** `fa_tc_04` +exp2 | 同上 | 4.04 | 136.0 | exp2+折叠 log2e |
-| **tensor_core raw 阶梯** `fa_tc_05` +occupancy | 同上 | 3.76 | **146.3** | `__launch_bounds__` 抬占用率 12.5%→18.4%（本梯顶，**68% FA2 / 73% TinyFA**） |
+| **tensor_core raw 阶梯** `fa_tc_05` +occupancy | 同上 | 3.76 | **146.3** | `__launch_bounds__` 抬占用率 12.5%→18.4%（本梯顶，**68% FA2**）|
+| **tensor_core raw 阶梯** `fa_tc_06` +双缓冲 | 同上 | 3.99 | 137.7 | **反例级**:smem 翻倍→占用率↓净亏（与 fafs buffer 级 +0.5% 一致）|
+| **参考** fafs 峰值(Br=128,实测) | 同上 | 3.44 | 159.9 | 参考仓库编译跑在本机 A800,autotune 峰值=75% FA2 |
 | cuda_core 脚手架 | fa_cc_02 tiled, fp32 B2 H16 S2048 D64 | 36.50 | 0.94 | fp32 CUDA 核 |
 | cuda_core 脚手架 | fa_cc_01 stream, 同上 | 74.84 | 0.46 | 每线程一 query |
 
-> **FA 现有三段完整教学**：`fa_cc_*` 标量脚手架（教算法）→ **`fa_tc_01..05` 手写 raw-mma 增量阶梯**（教"怎么一级级优化张量核 FA"，33→146 TFLOPS，一 delta 一级）→ TinyFA CuTe 终态（205T）。raw 阶梯与 GEMM 的 `tc_01→tc_06` 对称：**最大单跳同样是消 bank 冲突**（`fa_tc_02` swizzle +3.1×）。逐级 delta、SASS 指令 diff、ncu 证据、**与 flash_attention_from_scratch 16 级的对照 + 为何止于 68% FA2 的 ncu 诊断（占用率/流水线）**，见 [`flash_attn/docs/04_fa_tc_ladder.md`](flash_attn/docs/04_fa_tc_ladder.md)。
-> **两个关键教学点**：① **"SASS 指令数 ≠ 性能"**——swizzle 指令反增 +96 条却快 3×，加速全在 ncu 的 bank-conflict 里（`common/sass_*.sh`）；② **占用率是延迟墙**——`fa_tc_05` 只用 `__launch_bounds__` 把占用率 12.5%→18.4% 就 +8%，印证 ncu 诊断的"latency-bound"。到 FA2(214)/TinyFA(200) 的剩余差距是**多级流水线双缓冲 + d_head 分块 + SASS 微优化**（= fafs 的 rung 4/5/8–16），文档已给出路线。
+> **FA 现有三段完整教学 + 实测参考**：`fa_cc_*` 标量脚手架（教算法）→ **`fa_tc_01..06` 手写 raw-mma 增量阶梯**（33→146 TFLOPS，一 delta 一级，`fa_tc_06` 是双缓冲反例级）→ **fafs 实测参考曲线**（编译跑在本机 A800，进阶 145 + autotune 峰值 160）→ TinyFA CuTe 终态（205T）。raw 阶梯与 GEMM 的 `tc_01→tc_06` 对称：**最大单跳同样是消 bank 冲突**（`fa_tc_02` swizzle +3.1×）。
+> **关键结论（已实测校准，见 [`flash_attn/docs/04_fa_tc_ladder.md`](flash_attn/docs/04_fa_tc_ladder.md) + [`reference/`](flash_attn/reference/)）**：我们把参考仓库 flash_attention_from_scratch **实际编译跑在 A800**，据此对账——**我们的手写阶梯与 fafs 进阶逐级吻合**（按 async 对齐后 134.9 vs 139.6；Br=64 封顶都在 ~145–146）。fafs 的 "99.2% FA2" 是 **A100 + 其自身配置**下的数；**在 A800 本配置下 fafs 自己也只到 75% FA2（160，靠 Br=128）**。到 TinyFA(200)/FA2(214) 的差距 = Br=128 autotune(+10%) + CuTe 级 tiling + warp-specialization，均已定位。
+> **三个教学点**：① **"SASS 指令数 ≠ 性能"**（swizzle 指令 +96 却快 3×，加速在 ncu 的 bank-conflict）；② **占用率是延迟墙**（`fa_tc_05` 一行 `__launch_bounds__` +8%）；③ **不是每个优化都赢**（`fa_tc_06` 双缓冲净亏——与 fafs buffer 级 +0.5% 一致）。
 
 > **张量核 vs CUDA 核 = 206.7 / 0.94 ≈ 220×**——一句话钉死"注意力的两次 matmul 必须上张量核"。TinyFA 前向在 A800 达 **206–209 TFLOPS**，落在其 A100 自述 194–200T 的同一量级（A800 与 A100 张量核规格相同），**按构造复现**。ncu：`flashAttentionKernel` Compute(SM) **67.9%** / 占用率仅 **12.3%**——FA 靠 ILP+异步流水藏延迟、不靠高占用率（与 GEMM `tc_06` 占用 24% 同理）。
 
