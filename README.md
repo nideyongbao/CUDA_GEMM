@@ -210,11 +210,17 @@ flash_attn/build/cuda_core/verify 2 2 4 256 64 0          # fa_cc_02 tiled 对�
 
 | 引擎 | 配置 | 时间(ms) | TFLOPS | 说明 |
 | --- | --- | ---: | ---: | --- |
-| **tensor_core (TinyFA)** | fp16 B2 H32 S4096 D128 | 2.659 | **206.7** | 复现 TinyFA（A100 自述 194T）——A800≈A100 |
-| tensor_core (TinyFA) | bf16 同上 | 2.632 | **208.9** | 复现 TinyFA（A100 自述 200T） |
-| tensor_core (TinyFA) | fp16 causal | 1.550 | 177.3 | causal 只算下三角 |
+| **tensor_core TinyFA（CuTe 终态）** | fp16 B2 H32 S4096 D128 | 2.659 | **206.7** | 复现 TinyFA（A100 自述 194T）——A800≈A100 |
+| tensor_core TinyFA | bf16 同上 | 2.632 | **208.9** | 复现 TinyFA（A100 自述 200T） |
+| tensor_core TinyFA | fp16 causal | 1.550 | 177.3 | causal 只算下三角 |
+| **tensor_core raw 阶梯** `fa_tc_01` base | fp16 同上 | 15.84 | 34.7 | 手写 mma.sync，无 swizzle |
+| **tensor_core raw 阶梯** `fa_tc_02` +swizzle | 同上 | 5.23 | **105.2** | **消 bank 冲突 +3.0×** |
+| **tensor_core raw 阶梯** `fa_tc_03` +cp.async | 同上 | 4.61 | 119.2 | 异步载入 |
+| **tensor_core raw 阶梯** `fa_tc_04` +exp2 | 同上 | 4.53 | 121.3 | exp2+折叠 log2e（本梯顶，59% TinyFA） |
 | cuda_core 脚手架 | fa_cc_02 tiled, fp32 B2 H16 S2048 D64 | 36.50 | 0.94 | fp32 CUDA 核 |
 | cuda_core 脚手架 | fa_cc_01 stream, 同上 | 74.84 | 0.46 | 每线程一 query |
+
+> **FA 现有三段完整教学**：`fa_cc_*` 标量脚手架（教算法）→ **`fa_tc_01..04` 手写 raw-mma 增量阶梯**（教"怎么一级级优化张量核 FA"，34→121 TFLOPS，一 delta 一级）→ TinyFA CuTe 终态（205T）。raw 阶梯与 GEMM 的 `tc_01→tc_06` 对称：**最大单跳同样是消 bank 冲突**（`fa_tc_02` swizzle +3.0×）。逐级 delta、SASS 指令 diff、ncu bank-conflict 证据（base 1.18 亿次冲突→swizzle 清零）见 [`flash_attn/docs/04_fa_tc_ladder.md`](flash_attn/docs/04_fa_tc_ladder.md)。**这一课点透"SASS 指令数 ≠ 性能"**：swizzle 指令反增 +96 条却快 3×——加速全在 ncu 的 bank-conflict 里，指令计数看不见。工具：`common/sass_count.sh` + `sass_compare.py` + `ptxas_usage.sh`。
 
 > **张量核 vs CUDA 核 = 206.7 / 0.94 ≈ 220×**——一句话钉死"注意力的两次 matmul 必须上张量核"。TinyFA 前向在 A800 达 **206–209 TFLOPS**，落在其 A100 自述 194–200T 的同一量级（A800 与 A100 张量核规格相同），**按构造复现**。ncu：`flashAttentionKernel` Compute(SM) **67.9%** / 占用率仅 **12.3%**——FA 靠 ILP+异步流水藏延迟、不靠高占用率（与 GEMM `tc_06` 占用 24% 同理）。
 
