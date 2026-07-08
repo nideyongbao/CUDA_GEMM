@@ -43,7 +43,7 @@ echo "== verify (correctness) ==" | tee -a "$VERIFY"
   echo "### GEMM tensor_core (vs cuBLAS) @2048"; for id in 1 2 3 6; do "$ROOT"/gemm/build/tensor_core/verify $id 2048 2048 2048; done
   echo "### softmax (vs CPU double)"; for id in 1 2 3 4 5 6; do "$ROOT"/softmax/build/cuda_core/verify $id 1024 2048; done
   echo "### FA tensor_core TinyFA (vs CPU attn)"; for c in "fp16 2 8 512 128 0" "bf16 2 8 512 128 0" "fp16 2 8 512 64 1"; do "$ROOT"/flash_attn/build/tensor_core/verify $c; done
-  echo "### FA tensor_core raw ladder fa_tc_01..04 (vs CPU attn)"; for id in 1 2 3 4; do "$ROOT"/flash_attn/build/tensor_core/fa_tc_verify $id 2 8 512 0; "$ROOT"/flash_attn/build/tensor_core/fa_tc_verify $id 2 8 512 1; done
+  echo "### FA tensor_core raw ladder fa_tc_01..04 (vs CPU attn)"; for id in 1 2 3 4 5; do "$ROOT"/flash_attn/build/tensor_core/fa_tc_verify $id 2 8 512 0; "$ROOT"/flash_attn/build/tensor_core/fa_tc_verify $id 2 8 512 1; done
   echo "### FA cuda_core scaffold (vs CPU attn)"; for id in 1 2; do "$ROOT"/flash_attn/build/cuda_core/verify $id 2 4 256 64 0; done
 } 2>&1 | tee -a "$VERIFY"
 
@@ -53,7 +53,7 @@ echo "== bench (performance @ locked clock) ==" | tee -a "$BENCH"
   echo "### GEMM tensor_core @4096"; for id in 1 2 3 6; do "$ROOT"/gemm/build/tensor_core/bench $id 4096 4096 4096; done
   echo "### softmax @8192x8192"; for id in 1 2 3 4 5 6; do "$ROOT"/softmax/build/cuda_core/bench $id 8192 8192; done
   echo "### FA tensor_core TinyFA (CuTe endpoint) B2 H32 S4096 D128"; for c in "fp16 2 32 4096 128 0" "bf16 2 32 4096 128 0" "fp16 2 32 4096 128 1"; do "$ROOT"/flash_attn/build/tensor_core/bench $c; done
-  echo "### FA tensor_core raw ladder fa_tc_01..04 B2 H32 S4096 D128 fp16"; for id in 1 2 3 4; do "$ROOT"/flash_attn/build/tensor_core/fa_tc_bench $id 2 32 4096 0; done
+  echo "### FA tensor_core raw ladder fa_tc_01..04 B2 H32 S4096 D128 fp16"; for id in 1 2 3 4 5; do "$ROOT"/flash_attn/build/tensor_core/fa_tc_bench $id 2 32 4096 0; done
   echo "### FA cuda_core scaffold B2 H16 S2048 D64"; for id in 1 2; do "$ROOT"/flash_attn/build/cuda_core/bench $id 2 16 2048 64 0; done
 } 2>&1 | tee -a "$BENCH"
 

@@ -4,7 +4,9 @@
 //   id 1 fa_tc_01_base     : raw mma.sync + ldmatrix, sync copy, no swizzle, expf
 //   id 2 fa_tc_02_swizzle  : + XOR-swizzle smem (kill ldmatrix bank conflicts)
 //   id 3 fa_tc_03_cpasync  : + cp.async GMEM->SMEM
-//   id 4 fa_tc_04_exp2     : + exp2f with folded log2e (full)
+//   id 4 fa_tc_04_exp2     : + exp2f with folded log2e
+//   id 5 fa_tc_05_occ      : + occupancy tuning (__launch_bounds__ min 3 blocks/SM:
+//                            caps regs 184->168 -> occ 12.5%->18.75% -> hides mma latency)
 #pragma once
 #include "fa_tc.cuh"
 #include <string>
@@ -12,17 +14,17 @@
 
 namespace fatc {
 
-template <typename T, bool SWZ, bool CPA, bool EXP2>
+template <typename T, bool SWZ, bool CPA, bool EXP2, int MINBLK>
 void launch_cfg(const T* Q, const T* K, const T* V, T* O, int B, int S, int H,
                 bool causal, cudaStream_t st) {
   size_t smem = (BR * DH + 2 * BC * DH) * sizeof(T);
   dim3 grid(S / BR, H, B), block(WARPS * 32);
   if (causal) {
-    auto k = fa_tc_kernel<T, SWZ, CPA, EXP2, true>;
+    auto k = fa_tc_kernel<T, SWZ, CPA, EXP2, true, MINBLK>;
     cudaFuncSetAttribute(k, cudaFuncAttributeMaxDynamicSharedMemorySize, smem);
     k<<<grid, block, smem, st>>>(Q, K, V, O, B, S, H);
   } else {
-    auto k = fa_tc_kernel<T, SWZ, CPA, EXP2, false>;
+    auto k = fa_tc_kernel<T, SWZ, CPA, EXP2, false, MINBLK>;
     cudaFuncSetAttribute(k, cudaFuncAttributeMaxDynamicSharedMemorySize, smem);
     k<<<grid, block, smem, st>>>(Q, K, V, O, B, S, H);
   }
@@ -32,18 +34,19 @@ template <typename T>
 void launch_id(int id, const T* Q, const T* K, const T* V, T* O, int B, int S, int H,
                bool causal, cudaStream_t st) {
   switch (id) {
-    case 1: launch_cfg<T, false, false, false>(Q, K, V, O, B, S, H, causal, st); break;
-    case 2: launch_cfg<T, true,  false, false>(Q, K, V, O, B, S, H, causal, st); break;
-    case 3: launch_cfg<T, true,  true,  false>(Q, K, V, O, B, S, H, causal, st); break;
-    case 4: launch_cfg<T, true,  true,  true >(Q, K, V, O, B, S, H, causal, st); break;
+    case 1: launch_cfg<T, false, false, false, 1>(Q, K, V, O, B, S, H, causal, st); break;
+    case 2: launch_cfg<T, true,  false, false, 1>(Q, K, V, O, B, S, H, causal, st); break;
+    case 3: launch_cfg<T, true,  true,  false, 1>(Q, K, V, O, B, S, H, causal, st); break;
+    case 4: launch_cfg<T, true,  true,  true,  1>(Q, K, V, O, B, S, H, causal, st); break;
+    case 5: launch_cfg<T, true,  true,  true,  3>(Q, K, V, O, B, S, H, causal, st); break;
     default: break;
   }
 }
 
 inline const std::vector<std::pair<int, const char*>>& fa_tc_registry() {
   static const std::vector<std::pair<int, const char*>> r = {
-      {1, "fa_tc_01_base"}, {2, "fa_tc_02_swizzle"},
-      {3, "fa_tc_03_cpasync"}, {4, "fa_tc_04_exp2"}};
+      {1, "fa_tc_01_base"}, {2, "fa_tc_02_swizzle"}, {3, "fa_tc_03_cpasync"},
+      {4, "fa_tc_04_exp2"}, {5, "fa_tc_05_occ"}};
   return r;
 }
 inline const char* fa_tc_name(int id) {

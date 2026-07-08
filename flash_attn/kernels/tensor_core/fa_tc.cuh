@@ -45,8 +45,8 @@ __device__ __forceinline__ void ld_Afrag(const T* s, int rowbase, int kt, int la
   ldmatrix_x4(p, a0, a1, a2, a3);
 }
 
-template <typename T, bool SWZ, bool CPA, bool EXP2, bool CAUSAL>
-__global__ void __launch_bounds__(WARPS * 32)
+template <typename T, bool SWZ, bool CPA, bool EXP2, bool CAUSAL, int MINBLK = 1>
+__global__ void __launch_bounds__(WARPS * 32, MINBLK)
 fa_tc_kernel(const T* __restrict__ Qg, const T* __restrict__ Kg, const T* __restrict__ Vg,
              T* __restrict__ Og, int B, int S, int H) {
   const int qtile = blockIdx.x, h = blockIdx.y, b = blockIdx.z;
